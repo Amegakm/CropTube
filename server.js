@@ -31,6 +31,7 @@ const tempDir = path.join(__dirname, 'temp');
 const isWindows = process.platform === 'win32';
 const ytdlpFilename = isWindows ? 'yt-dlp.exe' : 'yt-dlp';
 const localYtdlpPath = path.join(binDir, ytdlpFilename);
+const globalCookiePath = path.join(binDir, 'global_cookies.txt');
 
 // Create necessary folders
 if (!fs.existsSync(tempDir)) {
@@ -245,7 +246,10 @@ app.get('/api/extract/stream', async (req, res) => {
 
   if (hasCookies) {
     args.push('--cookies', cookiePath);
-    logToClient('log', '🍪 Injecting custom authentication cookies to bypass bot checks...');
+    logToClient('log', '🍪 Injecting custom session cookies to bypass bot checks...');
+  } else if (fs.existsSync(globalCookiePath)) {
+    args.push('--cookies', globalCookiePath);
+    logToClient('log', '🍪 Injecting pre-registered server-side cookies to bypass bot checks...');
   } else {
     // Force YouTube Smart TV client spoofing first, as TVs are exempt from CAPTCHAs/bot checks, and fallback to mobile
     args.push('--extractor-args', 'youtube:player_client=tv,ios,android');
@@ -320,6 +324,43 @@ app.get('/api/extract/stream', async (req, res) => {
     }
     cleanupCookieFile();
   });
+});
+
+// Check if global pre-registered cookies exist
+app.get('/api/settings/cookies/check', (req, res) => {
+  const exists = fs.existsSync(globalCookiePath);
+  res.json({ hasGlobalCookies: exists });
+});
+
+// Save global cookies permanently on the server
+app.post('/api/settings/cookies', (req, res) => {
+  const { cookies } = req.body;
+  if (!cookies || !cookies.trim()) {
+    return res.status(400).json({ error: 'Cookies content cannot be empty.' });
+  }
+
+  try {
+    fs.writeFileSync(globalCookiePath, cookies.trim(), 'utf8');
+    console.log('[Settings] Pre-registered global server-side cookies file successfully.');
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Settings] Failed to write global cookies file:', err);
+    res.status(500).json({ error: 'Failed to write cookies file on server.' });
+  }
+});
+
+// Delete global cookies from the server
+app.delete('/api/settings/cookies', (req, res) => {
+  try {
+    if (fs.existsSync(globalCookiePath)) {
+      fs.unlinkSync(globalCookiePath);
+      console.log('[Settings] Deleted pre-registered global server-side cookies file.');
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Settings] Failed to delete global cookies file:', err);
+    res.status(500).json({ error: 'Failed to purge cookies file on server.' });
+  }
 });
 
 // Download Endpoint - Downloads clip then immediately cleans it up

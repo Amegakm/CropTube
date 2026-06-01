@@ -28,10 +28,61 @@ export default function App() {
   const [quality, setQuality] = useState('best');
   const [cookies, setCookies] = useState(() => localStorage.getItem('croptube_cookies') || '');
   const [showCookies, setShowCookies] = useState(false);
+  const [hasGlobalCookies, setHasGlobalCookies] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('croptube_cookies', cookies);
   }, [cookies]);
+
+  // Check if server already has pre-registered cookies on mount
+  useEffect(() => {
+    fetch('/api/settings/cookies/check')
+      .then(res => res.json())
+      .then(data => setHasGlobalCookies(data.hasGlobalCookies))
+      .catch(err => console.error('[Settings Check] Failed:', err));
+  }, []);
+
+  const handleSaveCookiesToServer = () => {
+    if (!cookies.trim()) {
+      alert("Please paste some cookie text in the box first!");
+      return;
+    }
+
+    fetch('/api/settings/cookies', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ cookies: cookies })
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Failed to save cookies on server.");
+      return res.json();
+    })
+    .then(() => {
+      setHasGlobalCookies(true);
+      alert("🎉 Success! Cookies registered permanently on the cloud server. Slicing in the cloud will now work smoothly from all your devices (including your phone)!");
+    })
+    .catch(err => alert("Error: " + err.message));
+  };
+
+  const handleRemoveCookiesFromServer = () => {
+    if (!window.confirm("Are you sure you want to delete the pre-registered cookies from the server?")) return;
+
+    fetch('/api/settings/cookies', {
+      method: 'DELETE'
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Failed to delete cookies from server.");
+      return res.json();
+    })
+    .then(() => {
+      setHasGlobalCookies(false);
+      setCookies('');
+      alert("Cookies successfully purged from the server.");
+    })
+    .catch(err => alert("Error: " + err.message));
+  };
 
   const playerRef = useRef(null);
   const terminalEndRef = useRef(null);
@@ -520,16 +571,24 @@ export default function App() {
 
             {/* YouTube Session Cookies (Collapsible) */}
             <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => setShowCookies(!showCookies)}
-                className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center space-x-1 transition-colors outline-none"
-              >
-                <span>{showCookies ? '▼ Hide' : '▶ Show'} Cloud Auth Cookies (Optional)</span>
-              </button>
+              <div className="flex justify-between items-center">
+                <button
+                  type="button"
+                  onClick={() => setShowCookies(!showCookies)}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center space-x-1 transition-colors outline-none"
+                >
+                  <span>{showCookies ? '▼ Hide' : '▶ Show'} Cloud Auth Settings</span>
+                </button>
+                {hasGlobalCookies && (
+                  <span className="text-[9px] text-emerald-400 bg-emerald-950/40 border border-emerald-900 px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    Cloud Cookies Active
+                  </span>
+                )}
+              </div>
               
               {showCookies && (
-                <div className="space-y-1.5 p-3.5 bg-slate-950 border border-slate-900 rounded-xl transition-all">
+                <div className="space-y-3 p-3.5 bg-slate-950 border border-slate-900 rounded-xl transition-all">
                   <div className="flex justify-between items-center text-[10px] text-slate-500">
                     <span>Paste YouTube Netscape Cookies</span>
                     <span className="text-[9px] text-indigo-400 font-mono">Persistent Cache</span>
@@ -541,8 +600,32 @@ export default function App() {
                     className="w-full h-[90px] p-2 bg-slate-900 border border-slate-850 focus:border-indigo-500 text-[10px] text-slate-400 font-mono rounded-lg outline-none resize-none placeholder-slate-700"
                     disabled={extracting}
                   />
-                  <p className="text-[9px] text-slate-600 leading-normal font-sans">
-                    Cloud servers get bot-challenged by YouTube. Paste exported cookies using extensions like <strong>Get cookies.txt LOCALLY</strong> to bypass. Cookies are deleted automatically on execution.
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveCookiesToServer}
+                      disabled={extracting || !cookies.trim()}
+                      className={`flex-1 py-1.5 rounded-lg font-semibold text-[10px] transition-colors ${
+                        !cookies.trim() || extracting
+                          ? 'bg-slate-900 text-slate-600 cursor-not-allowed border border-slate-950'
+                          : 'bg-indigo-600 hover:bg-indigo-500 text-white font-medium'
+                      }`}
+                    >
+                      Register to Cloud Server
+                    </button>
+                    {hasGlobalCookies && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveCookiesFromServer}
+                        disabled={extracting}
+                        className="px-3 py-1.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40 hover:border-rose-900 text-rose-400 rounded-lg font-semibold text-[10px] transition-all"
+                      >
+                        Purge from Server
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[9px] text-slate-650 leading-normal font-sans pt-1 border-t border-slate-900">
+                    Cloud servers get bot-challenged. Export cookies <strong>once</strong> from your laptop browser (using <strong>Get cookies.txt LOCALLY</strong> extension), click <strong>Register to Cloud Server</strong>, and CropTube will work seamlessly on your phone/tablet everywhere!
                   </p>
                 </div>
               )}
