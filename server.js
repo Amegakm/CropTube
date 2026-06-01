@@ -174,8 +174,10 @@ app.get('/api/extract', async (req, res) => {
   const outputPath = path.join(tempDir, outputFilename);
 
   // Map quality constraints
-  let formatSelector = 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]'; // Default best (1080p+)
-  if (quality === '720p') {
+  let formatSelector = 'bv+ba/b'; // Default best (unlocks 4K/2K vp9/av01 streams)
+  if (quality === '1080p') {
+    formatSelector = 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]';
+  } else if (quality === '720p') {
     formatSelector = 'bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]';
   } else if (quality === '480p') {
     formatSelector = 'bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[height<=480][ext=mp4]';
