@@ -26,6 +26,12 @@ export default function App() {
   const [currentStep, setCurrentStep] = useState(0); // 0: Idle, 1: Loading, 2: Streaming, 3: Completed
   const [errorMsg, setErrorMsg] = useState('');
   const [quality, setQuality] = useState('best');
+  const [cookies, setCookies] = useState(() => localStorage.getItem('croptube_cookies') || '');
+  const [showCookies, setShowCookies] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('croptube_cookies', cookies);
+  }, [cookies]);
 
   const playerRef = useRef(null);
   const terminalEndRef = useRef(null);
@@ -163,7 +169,7 @@ export default function App() {
     }
   };
 
-  // Triggers SSE surgical stream extraction
+  // Triggers SSE surgical stream extraction with cookie-POST handshake
   const handleExtractClip = () => {
     if (!youtubeUrl || !videoId) return;
 
@@ -189,89 +195,111 @@ export default function App() {
       { text: `[Parameters] Segment range: ${startTime} ➔ ${endTime} (${formatSecondsToHMS(endSec - startSec)})`, type: 'info' }
     ]);
 
-    const params = new URLSearchParams({
-      url: youtubeUrl,
-      start: startTime,
-      end: endTime,
-      quality: quality
-    });
+    // Step 1: Initiate job via secure POST (safely handles large cookie headers)
+    fetch('/api/extract/initiate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        url: youtubeUrl,
+        start: startTime,
+        end: endTime,
+        quality: quality,
+        cookies: cookies
+      })
+    })
+    .then(response => {
+      if (!response.ok) {
+        return response.json().then(errData => { throw new Error(errData.error || 'Job initiation failed.'); });
+      }
+      return response.json();
+    })
+    .then(data => {
+      const { fileId } = data;
+      setCurrentStep(2); // Slicing active
 
-    const eventSource = new EventSource(`/api/extract?${params.toString()}`);
+      // Step 2: Open SSE stream using the generated Job File ID
+      const eventSource = new EventSource(`/api/extract/stream?fileId=${fileId}`);
 
-    eventSource.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
 
-        if (payload.type === 'log') {
-          // Identify phase for step updates
-          if (payload.message.includes('🎬')) {
-            setCurrentStep(2); // Slicing & Streaming
-          }
+          if (payload.type === 'log') {
+            setLogs((prev) => [
+              ...prev,
+              { text: payload.message, type: 'info' }
+            ]);
+          } 
           
-          setLogs((prev) => [
-            ...prev,
-            { text: payload.message, type: 'info' }
-          ]);
-        } 
-        
-        else if (payload.type === 'error') {
-          setLogs((prev) => [
-            ...prev,
-            { text: `[FATAL EXCEPTION] ${payload.message}`, type: 'error' }
-          ]);
-          setExtracting(false);
-          setCurrentStep(0);
-          eventSource.close();
-        } 
-        
-        else if (payload.type === 'complete') {
-          const { fileId, filename } = payload.message;
-          setCurrentStep(3); // Completed
-          setLogs((prev) => [
-            ...prev,
-            { text: `🎉 [SUCCESS] Surgical cut completed successfully. Sliced file cached as ID ${fileId}.`, type: 'success' },
-            { text: `💾 Triggering browser file transfer...`, type: 'system' }
-          ]);
-
-          setClipsHistory((prev) => [
-            {
-              id: fileId,
-              title: `Clip (${startTime} - ${endTime})`,
-              url: youtubeUrl,
-              videoId,
-              start: startTime,
-              end: endTime,
-              duration: formatSecondsToHMS(endSec - startSec),
-              timestamp: new Date().toLocaleTimeString()
-            },
-            ...prev
-          ]);
-
-          // Trigger download attachment route
-          window.location.href = `/api/download/${fileId}`;
-
-          setTimeout(() => {
+          else if (payload.type === 'error') {
+            setLogs((prev) => [
+              ...prev,
+              { text: `[FATAL EXCEPTION] ${payload.message}`, type: 'error' }
+            ]);
             setExtracting(false);
             setCurrentStep(0);
-          }, 3000);
+            eventSource.close();
+          } 
+          
+          else if (payload.type === 'complete') {
+            const { fileId, filename } = payload.message;
+            setCurrentStep(3); // Completed
+            setLogs((prev) => [
+              ...prev,
+              { text: `🎉 [SUCCESS] Surgical cut completed successfully. Sliced file cached as ID ${fileId}.`, type: 'success' },
+              { text: `💾 Triggering browser file transfer...`, type: 'system' }
+            ]);
 
-          eventSource.close();
+            setClipsHistory((prev) => [
+              {
+                id: fileId,
+                title: `Clip (${startTime} - ${endTime})`,
+                url: youtubeUrl,
+                videoId,
+                start: startTime,
+                end: endTime,
+                duration: formatSecondsToHMS(endSec - startSec),
+                timestamp: new Date().toLocaleTimeString()
+              },
+              ...prev
+            ]);
+
+            // Trigger download attachment route
+            window.location.href = `/api/download/${fileId}`;
+
+            setTimeout(() => {
+              setExtracting(false);
+              setCurrentStep(0);
+            }, 3000);
+
+            eventSource.close();
+          }
+        } catch (e) {
+          console.error('[SSE Output Parser Error]', e);
         }
-      } catch (e) {
-        console.error('[SSE Output Parser Error]', e);
-      }
-    };
+      };
 
-    eventSource.onerror = (err) => {
-      console.error('[SSE Connection Exception]', err);
+      eventSource.onerror = (err) => {
+        console.error('[SSE Connection Exception]', err);
+        setLogs((prev) => [
+          ...prev,
+          { text: `⚠️ Connection with SSE logging tunnel was severed. Slicing may still be completing on local backend.`, type: 'error' }
+        ]);
+        setExtracting(false);
+        setCurrentStep(0);
+        eventSource.close();
+      };
+    })
+    .catch(err => {
       setLogs((prev) => [
         ...prev,
-        { text: `⚠️ Connection with SSE logging tunnel was severed. Slicing may still be completing on local backend.`, type: 'error' }
+        { text: `❌ [INITIATION ERROR] ${err.message}`, type: 'error' }
       ]);
       setExtracting(false);
       setCurrentStep(0);
-      eventSource.close();
-    };
+    });
   };
 
   const startSec = hmsToSeconds(startTime);
@@ -488,6 +516,36 @@ export default function App() {
                 <option value="480p">Medium Quality (480p)</option>
                 <option value="360p">Low Quality / Fast Download (360p)</option>
               </select>
+            </div>
+
+            {/* YouTube Session Cookies (Collapsible) */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowCookies(!showCookies)}
+                className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center space-x-1 transition-colors outline-none"
+              >
+                <span>{showCookies ? '▼ Hide' : '▶ Show'} Cloud Auth Cookies (Optional)</span>
+              </button>
+              
+              {showCookies && (
+                <div className="space-y-1.5 p-3.5 bg-slate-950 border border-slate-900 rounded-xl transition-all">
+                  <div className="flex justify-between items-center text-[10px] text-slate-500">
+                    <span>Paste YouTube Netscape Cookies</span>
+                    <span className="text-[9px] text-indigo-400 font-mono">Persistent Cache</span>
+                  </div>
+                  <textarea
+                    value={cookies}
+                    onChange={(e) => setCookies(e.target.value)}
+                    placeholder="# Netscape HTTP Cookie File&#10;.youtube.com&#9;TRUE&#9;/&#9;TRUE&#9;1745437890&#9;SID&#9;..."
+                    className="w-full h-[90px] p-2 bg-slate-900 border border-slate-850 focus:border-indigo-500 text-[10px] text-slate-400 font-mono rounded-lg outline-none resize-none placeholder-slate-700"
+                    disabled={extracting}
+                  />
+                  <p className="text-[9px] text-slate-600 leading-normal font-sans">
+                    Cloud servers get bot-challenged by YouTube. Paste exported cookies using extensions like <strong>Get cookies.txt LOCALLY</strong> to bypass. Cookies are deleted automatically on execution.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Timings summary */}

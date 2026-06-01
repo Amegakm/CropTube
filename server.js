@@ -133,9 +133,59 @@ async function resolveYtdlpPath() {
 // API ROUTES
 // ----------------------------------------------------
 
-// SSE Clip Extraction Stream
-app.get('/api/extract', async (req, res) => {
-  const { url, start, end, quality } = req.query;
+// Active extraction jobs registry
+const activeJobs = new Map();
+
+// Step 1: Initiate job, cache parameters, write temporary cookie file if provided
+app.post('/api/extract/initiate', (req, res) => {
+  const { url, start, end, quality, cookies } = req.body;
+
+  if (!url || !start || !end) {
+    return res.status(400).json({ error: 'Missing required parameters: url, start, end timestamps.' });
+  }
+
+  const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  const cookiePath = path.join(tempDir, `cookies_${fileId}.txt`);
+  let hasCookies = false;
+
+  if (cookies && cookies.trim()) {
+    try {
+      fs.writeFileSync(cookiePath, cookies.trim(), 'utf8');
+      hasCookies = true;
+      console.log(`[Cookies] Cached temporary Netscape cookie file for Job: ${fileId}`);
+    } catch (err) {
+      console.error('[Cookies] Failed to write temporary cookie file:', err);
+      return res.status(500).json({ error: 'Failed to register authentication cookies on server.' });
+    }
+  }
+
+  // Register job
+  activeJobs.set(fileId, {
+    url,
+    start,
+    end,
+    quality,
+    hasCookies,
+    cookiePath
+  });
+
+  // Automatically expire job parameters after 5 minutes to prevent memory leaks
+  setTimeout(() => {
+    if (activeJobs.has(fileId)) {
+      const job = activeJobs.get(fileId);
+      if (job.hasCookies && fs.existsSync(job.cookiePath)) {
+        try { fs.unlinkSync(job.cookiePath); } catch (e) {}
+      }
+      activeJobs.delete(fileId);
+    }
+  }, 5 * 60 * 1000);
+
+  return res.json({ fileId });
+});
+
+// Step 2: Stream logs via SSE using the cached job settings
+app.get('/api/extract/stream', async (req, res) => {
+  const { fileId } = req.query;
 
   // Set headers for Server-Sent Events (SSE)
   res.setHeader('Content-Type', 'text/event-stream');
@@ -149,10 +199,13 @@ app.get('/api/extract', async (req, res) => {
 
   logToClient('log', '⚡ Establishing SSE tunnel with CropTube extraction backend...');
 
-  if (!url || !start || !end) {
-    logToClient('error', 'Missing required parameters: url, start, end timestamps.');
+  if (!fileId || !activeJobs.has(fileId)) {
+    logToClient('error', 'Job expired or invalid session ID. Please re-initiate extraction.');
     return res.end();
   }
+
+  const job = activeJobs.get(fileId);
+  const { url, start, end, quality, hasCookies, cookiePath } = job;
 
   // Basic validation of start/end format
   const timeRegex = /^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
@@ -169,7 +222,6 @@ app.get('/api/extract', async (req, res) => {
     return res.end();
   }
 
-  const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
   const outputFilename = `croptube_${fileId}.mp4`;
   const outputPath = path.join(tempDir, outputFilename);
 
@@ -185,19 +237,29 @@ app.get('/api/extract', async (req, res) => {
     formatSelector = 'bv*[height<=360][ext=mp4]+ba[ext=m4a]/b[height<=360][ext=mp4]';
   }
 
-  // Exact syntax structure requested by user with dynamic quality selection, desync correction, and cloud bot bypass
+  // Build arguments list
   const args = [
     '--download-sections', `*${start}-${end}`,
     '--force-keyframes-at-cuts',
-    '--extractor-args', 'youtube:player_client=ios,android',
+  ];
+
+  if (hasCookies) {
+    args.push('--cookies', cookiePath);
+    logToClient('log', '🍪 Injecting custom authentication cookies to bypass bot checks...');
+  } else {
+    // Keep mobile client spoofing active if no cookies are provided
+    args.push('--extractor-args', 'youtube:player_client=ios,android');
+  }
+
+  args.push(
     '-f', formatSelector,
     '--merge-output-format', 'mp4',
     url,
     '-o', outputPath
-  ];
+  );
 
   logToClient('log', `🎬 Initiating surgical stream-seek for duration [${start} to ${end}]`);
-  logToClient('log', `🚀 Executing: yt-dlp --download-sections "*${start}-${end}" --force-keyframes-at-cuts -f "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]" [URL]`);
+  logToClient('log', `🚀 Executing: yt-dlp --download-sections "*${start}-${end}" --force-keyframes-at-cuts -f "${formatSelector}" [URL]`);
 
   const child = spawn(ytdlpCmd, args);
 
@@ -221,8 +283,21 @@ app.get('/api/extract', async (req, res) => {
     });
   });
 
+  const cleanupCookieFile = () => {
+    if (hasCookies && fs.existsSync(cookiePath)) {
+      try {
+        fs.unlinkSync(cookiePath);
+        console.log(`[Cleanup] Deleted temporary Netscape cookie file for Job: ${fileId}`);
+      } catch (unlinkErr) {
+        console.error('[Cleanup] Failed to delete temporary cookie file:', unlinkErr);
+      }
+    }
+    activeJobs.delete(fileId);
+  };
+
   child.on('error', (err) => {
     logToClient('error', `Process execution failed: ${err.message}`);
+    cleanupCookieFile();
     res.end();
   });
 
@@ -233,6 +308,7 @@ app.get('/api/extract', async (req, res) => {
     } else {
       logToClient('error', `yt-dlp process terminated with exit code: ${code}. Check logs above for details.`);
     }
+    cleanupCookieFile();
     res.end();
   });
 
@@ -242,6 +318,7 @@ app.get('/api/extract', async (req, res) => {
       console.log(`[Abort] SSE client disconnected. Terminating child process PID: ${child.pid}`);
       child.kill('SIGKILL');
     }
+    cleanupCookieFile();
   });
 });
 
