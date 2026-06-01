@@ -29,6 +29,7 @@ export default function App() {
   const [cookies, setCookies] = useState(() => localStorage.getItem('croptube_cookies') || '');
   const [showCookies, setShowCookies] = useState(false);
   const [hasGlobalCookies, setHasGlobalCookies] = useState(false);
+  const [cookiesExpired, setCookiesExpired] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('croptube_cookies', cookies);
@@ -278,9 +279,16 @@ export default function App() {
           const payload = JSON.parse(event.data);
 
           if (payload.type === 'log') {
+            const msgText = payload.message;
+            // Detect expired/rotated cookies warning from yt-dlp and surface it prominently
+            if (msgText.includes('cookies are no longer valid') || msgText.includes('cookies have') || msgText.includes('no longer valid')) {
+              setCookiesExpired(true);
+              setShowCookies(true); // Auto-open cookie panel so user can act immediately
+              setHasGlobalCookies(false); // Mark as stale
+            }
             setLogs((prev) => [
               ...prev,
-              { text: payload.message, type: 'info' }
+              { text: msgText, type: 'info' }
             ]);
           } 
           
@@ -377,6 +385,28 @@ export default function App() {
           <span>Local Node API: Active</span>
         </div>
       </header>
+
+      {/* Expired Cookies Warning Banner */}
+      {cookiesExpired && (
+        <div className="w-full max-w-7xl px-6 mt-4">
+          <div className="flex items-start gap-3 bg-amber-950/40 border border-amber-500/40 rounded-xl p-4">
+            <span className="text-amber-400 text-xl flex-shrink-0">⚠️</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-amber-300 text-sm font-bold">Your YouTube cookies have expired and been rotated by Google.</p>
+              <p className="text-amber-400/80 text-xs mt-1">YouTube invalidates cookies periodically as a security measure. You need to re-export fresh ones from your browser.</p>
+              <ol className="text-amber-400/70 text-xs mt-2 space-y-1 list-decimal list-inside">
+                <li>Open <strong className="text-amber-300">YouTube.com</strong> in Chrome while logged in</li>
+                <li>Click <strong className="text-amber-300">Get cookies.txt LOCALLY</strong> extension → Export</li>
+                <li>Copy all the text → paste it below in <strong className="text-amber-300">Cloud Auth Settings</strong></li>
+                <li>Click <strong className="text-amber-300">Register to Cloud Server</strong></li>
+              </ol>
+            </div>
+            <button onClick={() => setCookiesExpired(false)} className="text-amber-500 hover:text-amber-300 text-xs flex-shrink-0 transition-colors">
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Grid Dashboard */}
       <main className="w-full max-w-7xl px-6 mt-8 grid grid-cols-1 lg:grid-cols-12 gap-8">

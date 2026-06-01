@@ -276,22 +276,26 @@ app.get('/api/extract/stream', async (req, res) => {
   const args = [
     '--download-sections', `*${start}-${end}`,
     '--force-keyframes-at-cuts',
-    // Accurate audio-sync fix: tell ffmpeg to re-encode audio track only when merging
-    // This eliminates drift caused by keyframe misalignment on audio streams
+    // Accurate audio-sync fix: re-encode audio to AAC during merge to eliminate drift
     '--postprocessor-args', 'ffmpeg:-c:v copy -c:a aac -b:a 192k',
-    // Use Node.js JS runtime for yt-dlp's challenge solver (works on local + cloud)
+    // Use Node.js JS runtime for yt-dlp's JS challenge solver
     '--js-runtimes', `node:${process.execPath}`,
+    // ALWAYS apply client cascade — this is the primary bot-bypass mechanism.
+    // TV + web_creator are exempt from bot checks on YouTube's end.
+    // NOTE: This runs regardless of whether cookies are provided. Cookies are
+    // treated as an ADDITIVE auth boost, not a replacement for client spoofing.
+    // This means expired/invalid cookies won't cause a hard fail — yt-dlp will
+    // still attempt extraction via the spoofed client.
+    '--extractor-args', 'youtube:player_client=tv,web_creator,android',
   ];
 
+  // Add cookies if available (treats them as additive, not required)
   if (hasCookies) {
     args.push('--cookies', cookiePath);
-    logToClient('log', '🍪 Injecting custom session cookies to bypass bot checks...');
+    logToClient('log', '🍪 Session cookies loaded (additive auth boost)...');
   } else if (fs.existsSync(globalCookiePath)) {
     args.push('--cookies', globalCookiePath);
-    logToClient('log', '🍪 Injecting pre-registered server-side cookies to bypass bot checks...');
-  } else {
-    // Smart TV client is exempt from bot challenges; cascade to web_creator & android as fallback
-    args.push('--extractor-args', 'youtube:player_client=tv,web_creator,android');
+    logToClient('log', '🍪 Pre-registered server-side cookies loaded (additive auth boost)...');
   }
 
   // Explicitly tell yt-dlp which ffmpeg binary to use — avoids it picking up a broken
