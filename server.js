@@ -227,21 +227,33 @@ app.get('/api/extract/stream', async (req, res) => {
   const outputPath = path.join(tempDir, outputFilename);
 
   // Map quality constraints
-  let formatSelector = 'bv+ba/b'; // Default best (unlocks 4K/2K vp9/av01 streams)
-  if (quality === '1080p') {
-    formatSelector = 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]';
+  // Strategy: prefer native mp4+m4a streams for best compatibility & sync.
+  // Fallback chain: mp4 video+m4a audio → any video+m4a → best available with ffmpeg merge.
+  let formatSelector;
+  if (quality === 'best') {
+    // Best quality: prefer mp4/m4a first (no transcode needed, fastest + sync-safe)
+    // then fall back to any best streams (may be vp9/opus → ffmpeg will merge into mp4)
+    formatSelector = 'bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b';
+  } else if (quality === '1080p') {
+    formatSelector = 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]';
   } else if (quality === '720p') {
-    formatSelector = 'bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]';
+    formatSelector = 'bv*[height<=720][ext=mp4]+ba[ext=m4a]/bv*[height<=720]+ba/b[height<=720]';
   } else if (quality === '480p') {
-    formatSelector = 'bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[height<=480][ext=mp4]';
+    formatSelector = 'bv*[height<=480][ext=mp4]+ba[ext=m4a]/bv*[height<=480]+ba/b[height<=480]';
   } else if (quality === '360p') {
-    formatSelector = 'bv*[height<=360][ext=mp4]+ba[ext=m4a]/b[height<=360][ext=mp4]';
+    formatSelector = 'bv*[height<=360][ext=mp4]+ba[ext=m4a]/bv*[height<=360]+ba/b[height<=360]';
+  } else {
+    formatSelector = 'bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b';
   }
 
   // Build arguments list
   const args = [
     '--download-sections', `*${start}-${end}`,
     '--force-keyframes-at-cuts',
+    // Accurate audio-sync fix: tell ffmpeg to re-encode audio track only when merging
+    // This eliminates drift caused by keyframe misalignment on audio streams
+    '--postprocessor-args', 'ffmpeg:-c:v copy -c:a aac -b:a 192k',
+    // Use Node.js JS runtime for yt-dlp's challenge solver (works on local + cloud)
     '--js-runtimes', `node:${process.execPath}`,
   ];
 
@@ -252,13 +264,14 @@ app.get('/api/extract/stream', async (req, res) => {
     args.push('--cookies', globalCookiePath);
     logToClient('log', '🍪 Injecting pre-registered server-side cookies to bypass bot checks...');
   } else {
-    // Force YouTube Smart TV client spoofing first, as TVs are exempt from CAPTCHAs/bot checks, and fallback to mobile
-    args.push('--extractor-args', 'youtube:player_client=tv,ios,android');
+    // Smart TV client is exempt from bot challenges; cascade to web_creator & android as fallback
+    args.push('--extractor-args', 'youtube:player_client=tv,web_creator,android');
   }
 
   args.push(
     '-f', formatSelector,
     '--merge-output-format', 'mp4',
+    '--no-playlist',
     url,
     '-o', outputPath
   );
