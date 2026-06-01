@@ -247,8 +247,8 @@ app.get('/api/extract/stream', async (req, res) => {
     args.push('--cookies', cookiePath);
     logToClient('log', '🍪 Injecting custom authentication cookies to bypass bot checks...');
   } else {
-    // Keep mobile client spoofing active if no cookies are provided
-    args.push('--extractor-args', 'youtube:player_client=ios,android');
+    // Force YouTube Smart TV client spoofing first, as TVs are exempt from CAPTCHAs/bot checks, and fallback to mobile
+    args.push('--extractor-args', 'youtube:player_client=tv,ios,android');
   }
 
   args.push(
