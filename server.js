@@ -217,7 +217,17 @@ app.get('/api/extract/stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable Nginx/Render proxy buffering
   res.flushHeaders();
+
+  // Send SSE keepalive pings every 20 seconds.
+  // Render's load balancer silently kills SSE connections that go idle.
+  // SSE spec allows ':' comment lines as pings — browsers/EventSource ignore them.
+  const keepaliveInterval = setInterval(() => {
+    if (!res.writableEnded) {
+      res.write(': keepalive\n\n');
+    }
+  }, 20000);
 
   const logToClient = (type, message) => {
     res.write(`data: ${JSON.stringify({ type, message })}\n\n`);
@@ -251,25 +261,29 @@ app.get('/api/extract/stream', async (req, res) => {
   const outputFilename = `croptube_${fileId}.mp4`;
   const outputPath = path.join(tempDir, outputFilename);
 
-  // Map quality constraints
-  // Strategy: prefer native mp4+m4a DASH streams.
-  // CRITICAL: [protocol!=m3u8][protocol!=m3u8_native] blocks HLS streams (e.g. format 96)
-  // HLS streams cause ffmpeg to crash with exit code -11 (SIGSEGV) on cloud Linux environments.
-  // DASH streams are always preferred: they are proper seekable fragments, not live-stitched HLS.
+  // Map quality constraints.
+  // CRITICAL RULES for cloud-safe stream-copy:
+  //   [vcodec^=avc1]             → ONLY H.264 video. Blocks AV1 (av01/format 401) and VP9.
+  //                                AV1 at 4K forces a full CPU transcode (av1→h264) which takes
+  //                                minutes and times out Render's SSE connection.
+  //   [protocol!=m3u8]           → Blocks HLS streams that crash ffmpeg-static (exit code -11).
+  //   With H.264 + -c:v copy, ffmpeg just cuts and remuxes — no encode, near-instant.
   const noHLS = '[protocol!=m3u8][protocol!=m3u8_native]';
+  const h264Only = '[vcodec^=avc1]'; // Must be H.264 for stream-copy to work
   let formatSelector;
   if (quality === 'best') {
-    formatSelector = `bv*[ext=mp4]${noHLS}+ba[ext=m4a]${noHLS}/bv*${noHLS}+ba${noHLS}/b${noHLS}`;
+    // Cap at 1080p H.264 to guarantee stream-copy on Render's limited CPU
+    formatSelector = `bv*[height<=1080][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=1080]${h264Only}${noHLS}+ba${noHLS}/b[height<=1080]${noHLS}`;
   } else if (quality === '1080p') {
-    formatSelector = `bv*[height<=1080][ext=mp4]${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=1080]${noHLS}+ba${noHLS}/b[height<=1080]${noHLS}`;
+    formatSelector = `bv*[height<=1080][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=1080]${h264Only}${noHLS}+ba${noHLS}/b[height<=1080]${noHLS}`;
   } else if (quality === '720p') {
-    formatSelector = `bv*[height<=720][ext=mp4]${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=720]${noHLS}+ba${noHLS}/b[height<=720]${noHLS}`;
+    formatSelector = `bv*[height<=720][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=720]${h264Only}${noHLS}+ba${noHLS}/b[height<=720]${noHLS}`;
   } else if (quality === '480p') {
-    formatSelector = `bv*[height<=480][ext=mp4]${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=480]${noHLS}+ba${noHLS}/b[height<=480]${noHLS}`;
+    formatSelector = `bv*[height<=480][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=480]${h264Only}${noHLS}+ba${noHLS}/b[height<=480]${noHLS}`;
   } else if (quality === '360p') {
-    formatSelector = `bv*[height<=360][ext=mp4]${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=360]${noHLS}+ba${noHLS}/b[height<=360]${noHLS}`;
+    formatSelector = `bv*[height<=360][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=360]${h264Only}${noHLS}+ba${noHLS}/b[height<=360]${noHLS}`;
   } else {
-    formatSelector = `bv*[ext=mp4]${noHLS}+ba[ext=m4a]${noHLS}/bv*${noHLS}+ba${noHLS}/b${noHLS}`;
+    formatSelector = `bv*[height<=1080][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=1080]${h264Only}${noHLS}+ba${noHLS}/b[height<=1080]${noHLS}`;
   }
 
   // Build arguments list
@@ -338,7 +352,8 @@ app.get('/api/extract/stream', async (req, res) => {
     });
   });
 
-  const cleanupCookieFile = () => {
+  const cleanupAll = () => {
+    clearInterval(keepaliveInterval);
     if (hasCookies && fs.existsSync(cookiePath)) {
       try {
         fs.unlinkSync(cookiePath);
@@ -352,7 +367,7 @@ app.get('/api/extract/stream', async (req, res) => {
 
   child.on('error', (err) => {
     logToClient('error', `Process execution failed: ${err.message}`);
-    cleanupCookieFile();
+    cleanupAll();
     res.end();
   });
 
@@ -363,7 +378,7 @@ app.get('/api/extract/stream', async (req, res) => {
     } else {
       logToClient('error', `yt-dlp process terminated with exit code: ${code}. Check logs above for details.`);
     }
-    cleanupCookieFile();
+    cleanupAll();
     res.end();
   });
 
@@ -373,7 +388,7 @@ app.get('/api/extract/stream', async (req, res) => {
       console.log(`[Abort] SSE client disconnected. Terminating child process PID: ${child.pid}`);
       child.kill('SIGKILL');
     }
-    cleanupCookieFile();
+    cleanupAll();
   });
 });
 

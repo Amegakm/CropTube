@@ -591,7 +591,7 @@ export default function App() {
                 disabled={extracting}
                 className="w-full bg-slate-950 border border-slate-900 focus:border-indigo-500 text-slate-300 py-2.5 px-3.5 rounded-xl outline-none font-sans text-xs transition-colors"
               >
-                <option value="best">Best MP4 Quality (Prefers native mp4+aac — sync-safe)</option>
+                <option value="best">Best Quality (1080p H.264 — cloud-safe, instant)</option>
                 <option value="1080p">Full HD 1080p (mp4, sync-safe)</option>
                 <option value="720p">High Quality 720p (mp4, sync-safe)</option>
                 <option value="480p">Medium Quality 480p (mp4)</option>
