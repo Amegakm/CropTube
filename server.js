@@ -5,18 +5,43 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import axios from 'axios';
-import ffmpeg from 'ffmpeg-static';
+import ffmpegStatic from 'ffmpeg-static';
 
 // Initialize __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Add statically compiled ffmpeg directory into system environment PATH
-if (ffmpeg) {
-  const ffmpegDir = path.dirname(ffmpeg);
-  process.env.PATH = `${ffmpegDir}${path.delimiter}${process.env.PATH}`;
-  console.log(`[Auto-Setup] Statically compiled ffmpeg successfully loaded on environment PATH at: ${ffmpegDir}`);
+/**
+ * Resolves the best ffmpeg binary.
+ * Priority: system ffmpeg (via PATH) > ffmpeg-static npm bundle.
+ * ffmpeg-static can segfault (exit code -11) on some Linux environments
+ * (e.g. Render.com) when processing HLS/m3u8 streams, so always prefer
+ * the OS-installed binary when available.
+ */
+function resolveFFmpegPath() {
+  try {
+    const sysPath = execSync(process.platform === 'win32' ? 'where ffmpeg' : 'which ffmpeg')
+      .toString().trim().split('\n')[0].trim();
+    if (sysPath) {
+      console.log(`[Auto-Setup] System ffmpeg found at: ${sysPath} — using system binary.`);
+      return sysPath;
+    }
+  } catch (_) { /* not in PATH */ }
+
+  if (ffmpegStatic) {
+    console.log(`[Auto-Setup] Falling back to ffmpeg-static bundle: ${ffmpegStatic}`);
+    // Add the static binary dir to PATH so child processes (yt-dlp) can find it
+    const staticDir = path.dirname(ffmpegStatic);
+    process.env.PATH = `${staticDir}${path.delimiter}${process.env.PATH}`;
+    return ffmpegStatic;
+  }
+
+  throw new Error('ffmpeg not found on this system. Install it with: apt-get install -y ffmpeg');
 }
+
+const resolvedFFmpegPath = resolveFFmpegPath();
+// Ensure yt-dlp can find ffmpeg no matter how it's invoked
+process.env.FFMPEG_BINARY = resolvedFFmpegPath;
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -227,23 +252,24 @@ app.get('/api/extract/stream', async (req, res) => {
   const outputPath = path.join(tempDir, outputFilename);
 
   // Map quality constraints
-  // Strategy: prefer native mp4+m4a streams for best compatibility & sync.
-  // Fallback chain: mp4 video+m4a audio → any video+m4a → best available with ffmpeg merge.
+  // Strategy: prefer native mp4+m4a DASH streams.
+  // CRITICAL: [protocol!=m3u8][protocol!=m3u8_native] blocks HLS streams (e.g. format 96)
+  // HLS streams cause ffmpeg to crash with exit code -11 (SIGSEGV) on cloud Linux environments.
+  // DASH streams are always preferred: they are proper seekable fragments, not live-stitched HLS.
+  const noHLS = '[protocol!=m3u8][protocol!=m3u8_native]';
   let formatSelector;
   if (quality === 'best') {
-    // Best quality: prefer mp4/m4a first (no transcode needed, fastest + sync-safe)
-    // then fall back to any best streams (may be vp9/opus → ffmpeg will merge into mp4)
-    formatSelector = 'bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b';
+    formatSelector = `bv*[ext=mp4]${noHLS}+ba[ext=m4a]${noHLS}/bv*${noHLS}+ba${noHLS}/b${noHLS}`;
   } else if (quality === '1080p') {
-    formatSelector = 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]';
+    formatSelector = `bv*[height<=1080][ext=mp4]${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=1080]${noHLS}+ba${noHLS}/b[height<=1080]${noHLS}`;
   } else if (quality === '720p') {
-    formatSelector = 'bv*[height<=720][ext=mp4]+ba[ext=m4a]/bv*[height<=720]+ba/b[height<=720]';
+    formatSelector = `bv*[height<=720][ext=mp4]${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=720]${noHLS}+ba${noHLS}/b[height<=720]${noHLS}`;
   } else if (quality === '480p') {
-    formatSelector = 'bv*[height<=480][ext=mp4]+ba[ext=m4a]/bv*[height<=480]+ba/b[height<=480]';
+    formatSelector = `bv*[height<=480][ext=mp4]${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=480]${noHLS}+ba${noHLS}/b[height<=480]${noHLS}`;
   } else if (quality === '360p') {
-    formatSelector = 'bv*[height<=360][ext=mp4]+ba[ext=m4a]/bv*[height<=360]+ba/b[height<=360]';
+    formatSelector = `bv*[height<=360][ext=mp4]${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=360]${noHLS}+ba${noHLS}/b[height<=360]${noHLS}`;
   } else {
-    formatSelector = 'bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b';
+    formatSelector = `bv*[ext=mp4]${noHLS}+ba[ext=m4a]${noHLS}/bv*${noHLS}+ba${noHLS}/b${noHLS}`;
   }
 
   // Build arguments list
@@ -268,10 +294,17 @@ app.get('/api/extract/stream', async (req, res) => {
     args.push('--extractor-args', 'youtube:player_client=tv,web_creator,android');
   }
 
+  // Explicitly tell yt-dlp which ffmpeg binary to use — avoids it picking up a broken
+  // or missing ffmpeg and also ensures our resolved (system > static) binary is used
+  args.push('--ffmpeg-location', resolvedFFmpegPath);
+
   args.push(
     '-f', formatSelector,
     '--merge-output-format', 'mp4',
     '--no-playlist',
+    // Prefer DASH streams over HLS (m3u8). HLS streams (format 96) sent by TV client
+    // require ffmpeg to handle live-segment stitching which can crash ffmpeg-static.
+    '--compat-options', 'no-youtube-prefer-utc-upload-date',
     url,
     '-o', outputPath
   );
