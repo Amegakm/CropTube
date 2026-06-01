@@ -5,10 +5,18 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import axios from 'axios';
+import ffmpeg from 'ffmpeg-static';
 
 // Initialize __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Add statically compiled ffmpeg directory into system environment PATH
+if (ffmpeg) {
+  const ffmpegDir = path.dirname(ffmpeg);
+  process.env.PATH = `${ffmpegDir}${path.delimiter}${process.env.PATH}`;
+  console.log(`[Auto-Setup] Statically compiled ffmpeg successfully loaded on environment PATH at: ${ffmpegDir}`);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
