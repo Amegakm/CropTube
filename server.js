@@ -289,17 +289,19 @@ app.get('/api/extract/stream', async (req, res) => {
   // Build arguments list
   const args = [
     '--download-sections', `*${start}-${end}`,
-    '--force-keyframes-at-cuts',
-    // Accurate audio-sync fix: re-encode audio to AAC during merge to eliminate drift
-    '--postprocessor-args', 'ffmpeg:-c:v copy -c:a aac -b:a 192k',
+    // --force-keyframes-at-cuts is INTENTIONALLY REMOVED.
+    // That flag causes ffmpeg to re-encode ALL frames at cut points, even for H.264 input.
+    // On Render's shared CPU: 2-4 fps encode speed = a 24s clip takes 4+ minutes = timeout.
+    // Without it, yt-dlp stream-copies DASH segments directly (no encode, done in seconds).
+    // Cut accuracy: snaps to nearest existing keyframe in the stream (~0-2s). Acceptable tradeoff.
+
+    // Pure stream-copy remux: no transcoding of video or audio at all.
+    '--postprocessor-args', 'ffmpeg:-c copy',
+
     // Use Node.js JS runtime for yt-dlp's JS challenge solver
     '--js-runtimes', `node:${process.execPath}`,
-    // ALWAYS apply client cascade — this is the primary bot-bypass mechanism.
-    // TV + web_creator are exempt from bot checks on YouTube's end.
-    // NOTE: This runs regardless of whether cookies are provided. Cookies are
-    // treated as an ADDITIVE auth boost, not a replacement for client spoofing.
-    // This means expired/invalid cookies won't cause a hard fail — yt-dlp will
-    // still attempt extraction via the spoofed client.
+    // ALWAYS apply client cascade — TV + web_creator bypass YouTube bot checks.
+    // Cookies are additive auth, not required. Expired cookies won't hard-fail extraction.
     '--extractor-args', 'youtube:player_client=tv,web_creator,android',
   ];
 
