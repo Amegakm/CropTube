@@ -242,6 +242,7 @@ app.get('/api/extract/stream', async (req, res) => {
   const args = [
     '--download-sections', `*${start}-${end}`,
     '--force-keyframes-at-cuts',
+    '--js-runtimes', `node:${process.execPath}`,
   ];
 
   if (hasCookies) {
