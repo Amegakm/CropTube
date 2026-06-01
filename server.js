@@ -185,10 +185,11 @@ app.get('/api/extract', async (req, res) => {
     formatSelector = 'bv*[height<=360][ext=mp4]+ba[ext=m4a]/b[height<=360][ext=mp4]';
   }
 
-  // Exact syntax structure requested by user with dynamic quality selection and sync desync correction
+  // Exact syntax structure requested by user with dynamic quality selection, desync correction, and cloud bot bypass
   const args = [
     '--download-sections', `*${start}-${end}`,
     '--force-keyframes-at-cuts',
+    '--extractor-args', 'youtube:player_client=ios,android',
     '-f', formatSelector,
     '--merge-output-format', 'mp4',
     url,
