@@ -8,63 +8,45 @@
   }
 }
 
-/* Custom Scrollbar for Terminal and Layouts */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { @apply bg-slate-950; }
+::-webkit-scrollbar-thumb { @apply bg-slate-800 rounded-full hover:bg-slate-700 transition-colors; }
 
-::-webkit-scrollbar-track {
-  @apply bg-slate-950;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-slate-800 rounded-full hover:bg-slate-700 transition-colors;
-}
-
-/* Cybernetic Glowing Accents */
+/* Neon glows */
 .neon-glow-indigo {
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.15), 0 0 40px rgba(99, 102, 241, 0.05);
+  box-shadow: 0 0 20px rgba(99,102,241,0.15), 0 0 40px rgba(99,102,241,0.05);
 }
-
 .neon-glow-violet {
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.2), 0 0 40px rgba(139, 92, 246, 0.05);
+  box-shadow: 0 0 20px rgba(139,92,246,0.2), 0 0 40px rgba(139,92,246,0.05);
 }
-
-.neon-border-glow {
-  animation: borderGlow 4s infinite alternate;
-}
-
+.neon-border-glow { animation: borderGlow 4s infinite alternate; }
 @keyframes borderGlow {
-  0% {
-    border-color: rgba(99, 102, 241, 0.3);
-    box-shadow: 0 0 10px rgba(99, 102, 241, 0.1);
-  }
-  100% {
-    border-color: rgba(139, 92, 246, 0.6);
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
-  }
+  0%   { border-color: rgba(99,102,241,0.3); box-shadow: 0 0 10px rgba(99,102,241,0.1); }
+  100% { border-color: rgba(139,92,246,0.6); box-shadow: 0 0 20px rgba(139,92,246,0.2); }
 }
 
-/* Radial Glow Backgrounds */
+/* Radial backgrounds */
 .radial-glow {
-  background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
+  background: radial-gradient(circle at 50% 0%, rgba(99,102,241,0.08) 0%, rgba(0,0,0,0) 70%);
 }
 
-.radial-glow-green {
-  background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
+/* Grab-time flash — green border pulse when time is captured from player */
+@keyframes grabFlash {
+  0%   { border-color: rgb(16,185,129);  box-shadow: 0 0 0 3px rgba(16,185,129,0.4); }
+  60%  { border-color: rgb(16,185,129);  box-shadow: 0 0 0 7px rgba(16,185,129,0.1); }
+  100% { border-color: rgba(51,65,85,1); box-shadow: none; }
 }
+.grab-flash { animation: grabFlash 1s ease-out forwards; }
 
-/* Keyframes for Progress Spinner */
-@keyframes spin-slow {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* Seek pulse — indigo ring when player is seeked to a marker */
+@keyframes seekPulse {
+  0%   { box-shadow: 0 0 0 0   rgba(99,102,241,0.55); }
+  70%  { box-shadow: 0 0 0 9px rgba(99,102,241,0);    }
+  100% { box-shadow: none; }
 }
+.seek-pulse { animation: seekPulse 0.55s ease-out; }
 
-.animate-spin-slow {
-  animation: spin-slow 8s linear infinite;
-}
+/* Spin slow */
+@keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.animate-spin-slow { animation: spin-slow 8s linear infinite; }

@@ -296,7 +296,7 @@ app.get('/api/extract/stream', async (req, res) => {
     // Cut accuracy: snaps to nearest existing keyframe in the stream (~0-2s). Acceptable tradeoff.
 
     // Pure stream-copy remux: no transcoding of video or audio at all.
-    '--postprocessor-args', 'ffmpeg:-c copy',
+    '--postprocessor-args', 'ffmpeg:-c copy -loglevel warning',
 
     // Use Node.js JS runtime for yt-dlp's JS challenge solver
     '--js-runtimes', `node:${process.execPath}`,
