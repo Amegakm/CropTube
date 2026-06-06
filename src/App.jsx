@@ -184,7 +184,7 @@ export default function App() {
   const [clipsHistory, setClipsHistory]   = useState([]);
   const [currentStep, setCurrentStep]     = useState(0);
   const [errorMsg, setErrorMsg]           = useState('');
-  const [quality, setQuality]             = useState('best');
+  const [quality, setQuality]             = useState('1080p');
   const [cookies, setCookies]             = useState(() => localStorage.getItem('croptube_cookies') || '');
   const [showCookies, setShowCookies]     = useState(false);
   const [hasGlobalCookies, setHasGlobalCookies] = useState(false);
@@ -594,11 +594,12 @@ export default function App() {
                 className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 text-slate-300
                   py-2.5 px-3 rounded-xl outline-none text-xs transition-colors disabled:opacity-50"
               >
-                <option value="best">Best Quality (1080p H.264 — fast, cloud-safe)</option>
-                <option value="1080p">Full HD 1080p</option>
-                <option value="720p">HD 720p</option>
-                <option value="480p">Standard 480p</option>
-                <option value="360p">Low 360p (fastest)</option>
+                <option value="4K">4K (2160p)</option>
+                <option value="2K">2K (1440p)</option>
+                <option value="1080p">1080p (Full HD)</option>
+                <option value="720p">720p (HD)</option>
+                <option value="480p">480p (Standard)</option>
+                <option value="360p">360p (Low)</option>
               </select>
             </div>
 

@@ -271,9 +271,12 @@ app.get('/api/extract/stream', async (req, res) => {
   const noHLS = '[protocol!=m3u8][protocol!=m3u8_native]';
   const h264Only = '[vcodec^=avc1]'; // Must be H.264 for stream-copy to work
   let formatSelector;
-  if (quality === 'best') {
-    // Cap at 1080p H.264 to guarantee stream-copy on Render's limited CPU
-    formatSelector = `bv*[height<=1080][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=1080]${h264Only}${noHLS}+ba${noHLS}/b[height<=1080]${noHLS}`;
+  if (quality === '4K') {
+    // 4K requires VP9/AV1 since YouTube does not offer H.264 at resolutions above 1080p
+    formatSelector = `bv*[height<=2160]${noHLS}+ba${noHLS}/b[height<=2160]${noHLS}`;
+  } else if (quality === '2K') {
+    // 2K/1440p requires VP9/AV1
+    formatSelector = `bv*[height<=1440]${noHLS}+ba${noHLS}/b[height<=1440]${noHLS}`;
   } else if (quality === '1080p') {
     formatSelector = `bv*[height<=1080][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=1080]${h264Only}${noHLS}+ba${noHLS}/b[height<=1080]${noHLS}`;
   } else if (quality === '720p') {
@@ -287,6 +290,11 @@ app.get('/api/extract/stream', async (req, res) => {
   }
 
   // Build arguments list
+  const isTranscode = ['1080p', '720p', '480p', '360p'].includes(quality);
+  const postprocessorArgs = isTranscode
+    ? 'ffmpeg:-c:v libx264 -preset ultrafast -crf 23 -c:a aac -loglevel warning'
+    : 'ffmpeg:-c copy -avoid_negative_ts make_zero -loglevel warning';
+
   const args = [
     '--download-sections', `*${start}-${end}`,
     // --force-keyframes-at-cuts is INTENTIONALLY REMOVED.
@@ -295,8 +303,8 @@ app.get('/api/extract/stream', async (req, res) => {
     // Without it, yt-dlp stream-copies DASH segments directly (no encode, done in seconds).
     // Cut accuracy: snaps to nearest existing keyframe in the stream (~0-2s). Acceptable tradeoff.
 
-    // Pure stream-copy remux: no transcoding of video or audio at all.
-    '--postprocessor-args', 'ffmpeg:-c copy -loglevel warning',
+    // Transcode or stream-copy based on quality
+    '--postprocessor-args', postprocessorArgs,
 
     // Use Node.js JS runtime for yt-dlp's JS challenge solver
     '--js-runtimes', `node:${process.execPath}`,
@@ -330,7 +338,7 @@ app.get('/api/extract/stream', async (req, res) => {
   );
 
   logToClient('log', `🎬 Initiating surgical stream-seek for duration [${start} to ${end}]`);
-  logToClient('log', `🚀 Executing: yt-dlp --download-sections "*${start}-${end}" --force-keyframes-at-cuts -f "${formatSelector}" [URL]`);
+  logToClient('log', `🚀 Executing: yt-dlp --download-sections "*${start}-${end}" -f "${formatSelector}" --postprocessor-args "${postprocessorArgs}" [URL]`);
 
   const child = spawn(ytdlpCmd, args);
 
