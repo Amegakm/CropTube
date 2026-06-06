@@ -1,15 +1,11 @@
 services:
   - type: web
     name: croptube
-    runtime: node
-    buildCommand: apt-get install -y ffmpeg && npm install && npm run build
-    startCommand: node server.js
+    runtime: docker
     envVars:
       - key: NODE_ENV
         value: production
-      - key: NODE_VERSION
-        value: 20.11.0
     disk:
       name: croptube-storage
-      mountPath: /opt/render/project/src/bin
+      mountPath: /app/bin
       sizeGB: 1
