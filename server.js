@@ -4,7 +4,6 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
-import axios from 'axios';
 import ffmpegStatic from 'ffmpeg-static';
 
 // Initialize __dirname for ES Modules
@@ -53,119 +52,77 @@ app.use(express.json());
 // Set up paths
 const binDir = path.join(__dirname, 'bin');
 const tempDir = path.join(__dirname, 'temp');
+const cacheDir = path.join(tempDir, 'cache');
 const isWindows = process.platform === 'win32';
-const ytdlpFilename = isWindows ? 'yt-dlp.exe' : 'yt-dlp';
-const localYtdlpPath = path.join(binDir, ytdlpFilename);
 const globalCookiePath = path.join(binDir, 'global_cookies.txt');
 
 // Create necessary folders
-if (!fs.existsSync(binDir)) {
-  try {
-    fs.mkdirSync(binDir, { recursive: true });
-    console.log(`[Initialization] Created bin directory at: ${binDir}`);
-  } catch (err) {
-    console.error(`[Initialization] Failed to create bin directory:`, err);
-  }
-}
-if (!fs.existsSync(tempDir)) {
-  try {
-    fs.mkdirSync(tempDir, { recursive: true });
-    console.log(`[Initialization] Created temp directory at: ${tempDir}`);
-  } catch (err) {
-    console.error(`[Initialization] Failed to create temp directory:`, err);
-  }
-}
-
-/**
- * Checks if yt-dlp is available and runs successfully in the system PATH
- */
-function checkYtdlpInPath() {
-  try {
-    const cmd = isWindows ? 'where yt-dlp' : 'which yt-dlp';
-    const output = execSync(cmd).toString().trim().split('\r\n')[0];
-    if (!output) return false;
-    
-    // Verify it actually runs successfully without exit codes
-    execSync(`"${output}" --version`, { stdio: 'ignore' });
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-/**
- * Downloads the latest yt-dlp standalone binary
- */
-async function downloadYtdlp(targetPath) {
-  const binDirectory = path.dirname(targetPath);
-  if (!fs.existsSync(binDirectory)) {
-    fs.mkdirSync(binDirectory, { recursive: true });
-  }
-
-  let downloadUrl = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe';
-  if (!isWindows) {
-    if (process.platform === 'darwin') {
-      downloadUrl = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos';
-    } else {
-      downloadUrl = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
-    }
-  }
-
-  console.log(`[Auto-Setup] Downloading yt-dlp binary from ${downloadUrl}...`);
-  
-  const writer = fs.createWriteStream(targetPath);
-  const response = await axios({
-    url: downloadUrl,
-    method: 'GET',
-    responseType: 'stream'
-  });
-
-  response.data.pipe(writer);
-
-  return new Promise((resolve, reject) => {
-    writer.on('finish', () => {
-      if (!isWindows) {
-        fs.chmodSync(targetPath, '755'); // Make executable
-      }
-      console.log('[Auto-Setup] yt-dlp binary downloaded successfully.');
-      resolve();
-    });
-    writer.on('error', (err) => {
-      reject(err);
-    });
-  });
-}
-
-/**
- * Resolves the path to the yt-dlp executable (system or local)
- */
-async function resolveYtdlpPath() {
-  if (checkYtdlpInPath()) {
-    console.log('[Auto-Setup] Valid yt-dlp found in system PATH.');
-    return 'yt-dlp';
-  }
-
-  if (fs.existsSync(localYtdlpPath)) {
+for (const dir of [binDir, tempDir, cacheDir]) {
+  if (!fs.existsSync(dir)) {
     try {
-      execSync(`"${localYtdlpPath}" --version`, { stdio: 'ignore' });
-      console.log(`[Auto-Setup] Valid yt-dlp found locally at: ${localYtdlpPath}`);
-      return localYtdlpPath;
-    } catch (e) {
-      console.log(`[Auto-Setup] Local yt-dlp at ${localYtdlpPath} is broken or failed execution. Purging and re-downloading...`);
-      try {
-        fs.unlinkSync(localYtdlpPath);
-      } catch (unlinkErr) {}
+      fs.mkdirSync(dir, { recursive: true });
+      console.log(`[Initialization] Created directory: ${dir}`);
+    } catch (err) {
+      console.error(`[Initialization] Failed to create directory ${dir}:`, err);
     }
   }
+}
 
-  console.log('[Auto-Setup] Valid yt-dlp not found. Initiating automatic download of standalone release...');
+/**
+ * Resolves the path to the yt-dlp executable.
+ * Priority: system PATH (pip3-installed) > local bin folder.
+ */
+function resolveYtdlpPath() {
+  // 1. Prefer the pip3-installed system yt-dlp (guaranteed on our Docker image)
   try {
-    await downloadYtdlp(localYtdlpPath);
-    return localYtdlpPath;
-  } catch (error) {
-    console.error('[Auto-Setup] Failed to download yt-dlp binary:', error);
-    throw new Error('yt-dlp is not available and could not be downloaded automatically.');
+    const out = execSync(isWindows ? 'where yt-dlp' : 'which yt-dlp')
+      .toString().trim().split('\n')[0].trim();
+    if (out) {
+      console.log(`[Auto-Setup] System yt-dlp found: ${out}`);
+      return out;
+    }
+  } catch (_) { /* not found */ }
+
+  throw new Error(
+    'yt-dlp not found in PATH. On Docker/Render, ensure the Dockerfile installs it via pip3.'
+  );
+}
+
+// Resolve yt-dlp path once on startup (synchronous — pip install is always present in Docker)
+let ytdlpCmd;
+try {
+  ytdlpCmd = resolveYtdlpPath();
+} catch (err) {
+  console.error(`[Initialization] FATAL — ${err.message}`);
+  process.exit(1);
+}
+
+/**
+ * Build the common yt-dlp environment for spawned processes.
+ * Sets HOME/XDG_CACHE_HOME so yt-dlp can write its cache even in
+ * read-only container roots (Render, Railway, etc.).
+ */
+function ytdlpEnv() {
+  return { ...process.env, PYTHONUNBUFFERED: '1', HOME: tempDir, XDG_CACHE_HOME: cacheDir };
+}
+
+/**
+ * Common yt-dlp flags shared by every invocation.
+ * - Deno (installed in Docker) handles EJS signature/n-challenge solving.
+ * - android+web player clients: android often bypasses bot detection on cloud IPs.
+ * - chrome impersonation (curl_cffi installed) helps bypass TLS fingerprinting.
+ */
+function commonArgs() {
+  const args = [
+    '--ignore-config',
+    '--impersonate', 'chrome',
+    '--extractor-args', 'youtube:player_client=android,web',
+    '--cache-dir', cacheDir,
+  ];
+  if (fs.existsSync(globalCookiePath)) {
+    args.push('--cookies', globalCookiePath);
   }
+  return args;
 }
 
 // ----------------------------------------------------
@@ -179,14 +136,6 @@ app.get('/api/search', async (req, res) => {
     return res.status(400).json({ error: 'Missing search query.' });
   }
 
-  let ytdlpCmd;
-  try {
-    ytdlpCmd = await resolveYtdlpPath();
-  } catch (err) {
-    return res.status(500).json({ error: `Dependency Resolution Error: ${err.message}` });
-  }
-
-  // Use ytsearch5 to get top 5 results quickly
   const args = [
     `ytsearch5:${q}`,
     '--flat-playlist',
@@ -203,9 +152,7 @@ app.get('/api/search', async (req, res) => {
 
   console.log(`[Search] Executing search for query: "${q}"`);
 
-  const child = spawn(ytdlpCmd, args, {
-    env: { ...process.env, PYTHONUNBUFFERED: '1' }
-  });
+  const child = spawn(ytdlpCmd, args, { env: ytdlpEnv() });
   let stdoutData = '';
   let stderrData = '';
 
@@ -248,36 +195,19 @@ app.get('/api/formats', async (req, res) => {
     return res.status(400).json({ error: 'Missing video URL.' });
   }
 
-  let ytdlpCmd;
-  try {
-    ytdlpCmd = await resolveYtdlpPath();
-  } catch (err) {
-    return res.status(500).json({ error: `Dependency Resolution Error: ${err.message}` });
-  }
-
   const args = [
-    '--ignore-config',
+    ...commonArgs(),
     '--dump-single-json',
     '--skip-download',
     '--no-warnings',
     '--no-playlist',
-    '--js-runtimes', `node:${process.execPath}`,
-    '--impersonate', 'chrome',
-    '--cache-dir', path.join(tempDir, 'cache'),
-    '--remote-components', 'ejs:github'
   ];
-
-  if (fs.existsSync(globalCookiePath)) {
-    args.push('--cookies', globalCookiePath);
-  }
 
   args.push(url);
 
   console.log(`[Formats] Fetching formats for: "${url}"`);
 
-  const child = spawn(ytdlpCmd, args, {
-    env: { ...process.env, PYTHONUNBUFFERED: '1', HOME: tempDir, XDG_CACHE_HOME: tempDir }
-  });
+  const child = spawn(ytdlpCmd, args, { env: ytdlpEnv() });
   let stdoutData = '';
   let stderrData = '';
 
@@ -455,20 +385,15 @@ app.get('/api/extract/stream', async (req, res) => {
     formatSelector = `bv*[height<=${h}][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=${h}]${h264Only}${noHLS}+ba${noHLS}/b[height<=${h}]${noHLS}`;
   }
 
-  // Build arguments list
+  // Build yt-dlp argument list
   const isTranscode = !isAudio && ['1080p', '720p', '480p', '360p'].includes(quality);
   const postprocessorArgs = isTranscode
     ? 'ffmpeg:-c:v libx264 -preset ultrafast -crf 23 -c:a aac -loglevel warning'
     : 'ffmpeg:-c copy -avoid_negative_ts make_zero -loglevel warning';
 
   const args = [
-    '--ignore-config',
+    ...commonArgs(),
     '--download-sections', `*${start}-${end}`,
-    // Use Node.js JS runtime for yt-dlp's JS challenge solver
-    '--js-runtimes', `node:${process.execPath}`,
-    '--impersonate', 'chrome',
-    '--cache-dir', path.join(tempDir, 'cache'),
-    '--remote-components', 'ejs:github',
     '--newline',
     '--progress',
   ];
@@ -488,40 +413,28 @@ app.get('/api/extract/stream', async (req, res) => {
     args.push('--postprocessor-args', postprocessorArgs);
   }
 
-  // Add cookies if available (treats them as additive, not required)
-  if (hasCookies) {
-    args.push('--cookies', cookiePath);
-    logToClient('log', '🍪 Session cookies loaded (additive auth boost)...');
-  } else if (fs.existsSync(globalCookiePath)) {
-    args.push('--cookies', globalCookiePath);
-    logToClient('log', '🍪 Pre-registered server-side cookies loaded (additive auth boost)...');
+  // Log whether cookies are active
+  if (fs.existsSync(globalCookiePath)) {
+    logToClient('log', '🍪 Server-side cookies loaded (cloud auth active)...');
   }
 
-  // Explicitly tell yt-dlp which ffmpeg binary to use — avoids it picking up a broken
-  // or missing ffmpeg and also ensures our resolved (system > static) binary is used
   args.push('--ffmpeg-location', resolvedFFmpegPath);
-
   args.push('-f', formatSelector);
-  
+
   if (!isAudio) {
     args.push('--merge-output-format', targetFormat);
   }
 
   args.push(
     '--no-playlist',
-    // Prefer DASH streams over HLS (m3u8). HLS streams (format 96) sent by TV client
-    // require ffmpeg to handle live-segment stitching which can crash ffmpeg-static.
-    '--compat-options', 'no-youtube-prefer-utc-upload-date',
     url,
     '-o', outputPath
   );
 
   logToClient('log', `🎬 Initiating surgical stream-seek for duration [${start} to ${end}]`);
-  logToClient('log', `🚀 Executing: yt-dlp --download-sections "*${start}-${end}" -f "${formatSelector}" --postprocessor-args "${postprocessorArgs}" [URL]`);
+  logToClient('log', `🚀 Executing: yt-dlp --download-sections "*${start}-${end}" -f "${formatSelector}" [URL]`);
 
-  const child = spawn(ytdlpCmd, args, {
-    env: { ...process.env, PYTHONUNBUFFERED: '1', HOME: tempDir, XDG_CACHE_HOME: tempDir }
-  });
+  const child = spawn(ytdlpCmd, args, { env: ytdlpEnv() });
 
   child.stdout.on('data', (data) => {
     const lines = data.toString().split('\n');
@@ -669,14 +582,11 @@ if (isProduction) {
 }
 
 // Start Server
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log(`=================================================`);
   console.log(`  CropTube Backend Server running on port ${PORT}`);
+  console.log(`  yt-dlp: ${ytdlpCmd}`);
+  console.log(`  ffmpeg: ${resolvedFFmpegPath}`);
+  console.log(`  cookies: ${fs.existsSync(globalCookiePath) ? 'loaded ✓' : 'not found'}`);
   console.log(`=================================================`);
-  try {
-    // Proactively resolve/download yt-dlp on startup
-    await resolveYtdlpPath();
-  } catch (err) {
-    console.error(`[Initialization WARNING] Auto-setup of yt-dlp failed: ${err.message}`);
-  }
 });
