@@ -369,41 +369,57 @@ app.get('/api/extract/stream', async (req, res) => {
   const outputPath = path.join(tempDir, outputFilename);
 
   // ─── Format selector ─────────────────────────────────────────────────────
-  // noHLS: Blocks HLS (m3u8) streams — they can crash ffmpeg-static (exit -11)
-  // h264Only: Enforces H.264 for 1080p and below — allows fast stream-copy via ffmpeg
-  // For 4K/2K YouTube only provides VP9/AV1, so H.264 filter is intentionally omitted
+  // Strategy: always prefer the best stream that fits within the quality ceiling.
+  // No hard "minimum height" floors — they cause "format not available" errors when
+  // a video's max resolution is below the floor (e.g. video tops out at 1080p and user picks 4K).
+  // The UI only shows resolutions that /api/formats confirmed are actually available,
+  // so if the user selected 4K it should exist. But for safety we never hard-error.
+  //
+  // noHLS  → skip HLS (m3u8) streams; they crash ffmpeg-static with exit code -11
+  // h264   → for <=1080p: prefer H.264 so stream-copy works without re-encoding
+  //           (YouTube only offers VP9/AV1 above 1080p, so no h264 filter there)
   const noHLS = '[protocol!=m3u8][protocol!=m3u8_native]';
-  const h264Only = '[vcodec^=avc1]';
+  const h264  = '[vcodec^=avc1]';
   let formatSelector;
 
   if (isAudio) {
     formatSelector = `ba${noHLS}/ba`;
 
   } else if (quality === '4K' || quality === '2160p') {
-    // YouTube 4K is exclusively VP9/AV1 — enforce height>=1440 so we never fall to low quality
-    formatSelector = `bv*[height>=1440][height<=2160]${noHLS}+ba${noHLS}/bv*[height>=1440]${noHLS}+ba${noHLS}/bv*[height<=2160]${noHLS}+ba${noHLS}`;
+    // Best video up to 2160p (VP9/AV1 — YouTube doesn't offer H.264 above 1080p)
+    // Falls back to 1440p, then 1080p if 4K streams are unavailable
+    formatSelector = [
+      `bv*[height<=2160]${noHLS}+ba${noHLS}`,
+      `bv*${noHLS}+ba${noHLS}`,
+    ].join('/');
 
   } else if (quality === '2K' || quality === '1440p') {
-    // 2K: enforce height>=1080 so we don't silently fall to 720p
-    formatSelector = `bv*[height>=1080][height<=1440]${noHLS}+ba${noHLS}/bv*[height<=1440]${noHLS}+ba${noHLS}`;
+    // Best up to 1440p, fall back to whatever is best
+    formatSelector = [
+      `bv*[height<=1440]${noHLS}+ba${noHLS}`,
+      `bv*${noHLS}+ba${noHLS}`,
+    ].join('/');
 
   } else {
-    // Standard resolutions (1080p / 720p / 480p / 360p) — prefer H.264 for fast remux
+    // 1080p / 720p / 480p / 360p — prefer H.264 MP4 for original-quality stream-copy
     const h = parseInt(quality) || 1080;
-    const minH = Math.round(h * 0.6); // allow up to 40% below target (e.g. 640p if asking 1080p)
     formatSelector = [
-      `bv*[height>=${minH}][height<=${h}][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}`,
-      `bv*[height<=${h}][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}`,
-      `bv*[height<=${h}]${h264Only}${noHLS}+ba${noHLS}`,
+      `bv*[height<=${h}][ext=mp4]${h264}${noHLS}+ba[ext=m4a]${noHLS}`,
+      `bv*[height<=${h}]${h264}${noHLS}+ba${noHLS}`,
+      `bv*[height<=${h}]${noHLS}+ba${noHLS}`,
       `b[height<=${h}]${noHLS}`,
     ].join('/');
   }
 
   // ─── Build yt-dlp argument list ───────────────────────────────────────────
-  const isTranscode = !isAudio && ['1080p', '720p', '480p', '360p'].includes(quality);
-  const postprocessorArgs = isTranscode
-    ? 'ffmpeg:-c:v libx264 -preset ultrafast -crf 23 -c:a aac -loglevel warning'
+  // Always use stream-copy (-c copy) — no re-encoding, 100% original quality.
+  // yt-dlp's --download-sections works correctly with -c copy; ffmpeg cuts at
+  // the nearest keyframe, so the output is within ~1s of the requested timestamps
+  // but with zero quality loss (vs ultrafast libx264 which degrades quality noticeably).
+  const postprocessorArgs = isAudio
+    ? null
     : 'ffmpeg:-c copy -avoid_negative_ts make_zero -loglevel warning';
+
 
   const args = [
     ...commonArgs(quality),
