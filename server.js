@@ -114,8 +114,10 @@ function ytdlpEnv() {
  *   - 'web'         → required for 4K / 2K (android doesn't serve those streams)
  */
 function commonArgs(quality = '') {
-  const needsHighRes = ['4K', '2160p', '2K', '1440p'].includes(quality);
-  const playerClient = needsHighRes ? 'web' : 'android,web';
+  // Always use the 'web' player client. Mobile clients like 'android' suffer from
+  // server-side SABR constraints on YouTube, which skip high-quality DASH formats
+  // and force low-quality fallback streams (e.g. 360p itag 18).
+  const playerClient = 'web';
 
   const args = [
     '--ignore-config',
@@ -379,35 +381,29 @@ app.get('/api/extract/stream', async (req, res) => {
   // h264   → for <=1080p: prefer H.264 so stream-copy works without re-encoding
   //           (YouTube only offers VP9/AV1 above 1080p, so no h264 filter there)
   const noHLS = '[protocol!=m3u8][protocol!=m3u8_native]';
-  const h264  = '[vcodec^=avc1]';
   let formatSelector;
 
   if (isAudio) {
     formatSelector = `ba${noHLS}/ba`;
 
-  } else if (quality === '4K' || quality === '2160p') {
-    // Best video up to 2160p (VP9/AV1 — YouTube doesn't offer H.264 above 1080p)
-    // Falls back to 1440p, then 1080p if 4K streams are unavailable
-    formatSelector = [
-      `bv*[height<=2160]${noHLS}+ba${noHLS}`,
-      `bv*${noHLS}+ba${noHLS}`,
-    ].join('/');
-
-  } else if (quality === '2K' || quality === '1440p') {
-    // Best up to 1440p, fall back to whatever is best
-    formatSelector = [
-      `bv*[height<=1440]${noHLS}+ba${noHLS}`,
-      `bv*${noHLS}+ba${noHLS}`,
-    ].join('/');
-
   } else {
-    // 1080p / 720p / 480p / 360p — prefer H.264 MP4 for original-quality stream-copy
-    const h = parseInt(quality) || 1080;
+    // Determine target height limit
+    let targetHeight = 1080;
+    if (quality === '4K' || quality === '2160p') {
+      targetHeight = 2160;
+    } else if (quality === '2K' || quality === '1440p') {
+      targetHeight = 1440;
+    } else {
+      targetHeight = parseInt(quality) || 1080;
+    }
+
+    // Always prefer the highest quality video stream (AV1/VP9/H.264) matching target height,
+    // combined with the best audio stream, without transcoding.
     formatSelector = [
-      `bv*[height<=${h}][ext=mp4]${h264}${noHLS}+ba[ext=m4a]${noHLS}`,
-      `bv*[height<=${h}]${h264}${noHLS}+ba${noHLS}`,
-      `bv*[height<=${h}]${noHLS}+ba${noHLS}`,
-      `b[height<=${h}]${noHLS}`,
+      `bv*[height<=${targetHeight}]${noHLS}+ba${noHLS}`,
+      `bv*${noHLS}+ba${noHLS}`,
+      `b[height<=${targetHeight}]${noHLS}`,
+      `b${noHLS}`,
     ].join('/');
   }
 
