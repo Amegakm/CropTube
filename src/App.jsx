@@ -987,6 +987,70 @@ export default function App() {
               </div>
 
 
+              {/* ── YouTube Auth (required on cloud IPs) ───────────────── */}
+              <div className="space-y-1.5">
+                <button
+                  onClick={() => setShowCookies(v => !v)}
+                  className="w-full flex justify-between items-center px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-800 hover:border-amber-700/50 transition-all group"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase group-hover:text-amber-400 transition-colors">
+                      🔑 YouTube Auth (Cookies)
+                    </span>
+                    {hasGlobalCookies ? (
+                      <span className="text-[9px] text-emerald-400 bg-emerald-950/50 border border-emerald-800/60 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-amber-400 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded-full">
+                        Required for cloud
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-slate-600 text-[10px]">{showCookies ? '▲' : '▼'}</span>
+                </button>
+
+                {showCookies && (
+                  <div className="p-3 bg-slate-950/60 border border-amber-900/30 rounded-xl space-y-2.5">
+                    <div className="text-[9px] text-amber-400/80 bg-amber-950/20 border border-amber-900/30 rounded-lg p-2 leading-relaxed">
+                      <strong className="text-amber-400">⚠ Required on cloud servers.</strong> YouTube blocks datacenter IPs.
+                      Export cookies using <span className="font-mono bg-black/40 px-1 rounded">"Get cookies.txt LOCALLY"</span> Chrome extension → paste below → Register.
+                    </div>
+                    <textarea
+                      value={cookies}
+                      onChange={e => setCookies(e.target.value)}
+                      placeholder={'# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t...\tSID\t...'}
+                      rows={4}
+                      disabled={extracting}
+                      className="w-full p-2 bg-black/50 border border-slate-800 focus:border-amber-700/60
+                        text-[9px] text-slate-400 font-mono rounded-lg outline-none resize-none
+                        placeholder-slate-700 disabled:opacity-50 transition-colors"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveCookies}
+                        disabled={!cookies.trim() || extracting}
+                        className="flex-1 py-1.5 rounded-lg text-[9px] font-bold transition-all
+                          bg-amber-600 hover:bg-amber-500 text-white
+                          disabled:bg-slate-900 disabled:text-slate-600 disabled:cursor-not-allowed"
+                      >
+                        Register on Server
+                      </button>
+                      {hasGlobalCookies && (
+                        <button
+                          onClick={deleteCookies}
+                          disabled={extracting}
+                          className="px-2.5 py-1.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40
+                            text-rose-400 rounded-lg text-[9px] font-semibold transition-all"
+                        >
+                          Purge
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Action Trigger / Progress Button */}
               <div className="pt-2 border-t border-slate-900/40">
                 {(extracting || logs.length > 0) ? (
