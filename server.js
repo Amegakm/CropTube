@@ -108,15 +108,19 @@ function ytdlpEnv() {
 
 /**
  * Common yt-dlp flags shared by every invocation.
- * - Deno (installed in Docker) handles EJS signature/n-challenge solving.
- * - android+web player clients: android often bypasses bot detection on cloud IPs.
- * - chrome impersonation (curl_cffi installed) helps bypass TLS fingerprinting.
+ *
+ * playerClient strategy:
+ *   - 'android,web' → fast, good bot-resistance, but android caps at 1080p
+ *   - 'web'         → required for 4K / 2K (android doesn't serve those streams)
  */
-function commonArgs() {
+function commonArgs(quality = '') {
+  const needsHighRes = ['4K', '2160p', '2K', '1440p'].includes(quality);
+  const playerClient = needsHighRes ? 'web' : 'android,web';
+
   const args = [
     '--ignore-config',
     '--impersonate', 'chrome',
-    '--extractor-args', 'youtube:player_client=android,web',
+    '--extractor-args', `youtube:player_client=${playerClient}`,
     '--cache-dir', cacheDir,
   ];
   if (fs.existsSync(globalCookiePath)) {
@@ -361,38 +365,45 @@ app.get('/api/extract/stream', async (req, res) => {
   let outputFilename = `croptube_${fileId}.${targetFormat === 'webm-audio' ? 'webm' : targetFormat}`;
   const outputPath = path.join(tempDir, outputFilename);
 
-  // Map quality constraints.
-  // CRITICAL RULES for cloud-safe stream-copy:
-  //   [vcodec^=avc1]             → ONLY H.264 video. Blocks AV1 (av01/format 401) and VP9.
-  //                                AV1 at 4K forces a full CPU transcode (av1→h264) which takes
-  //                                minutes and times out Render's SSE connection.
-  //   [protocol!=m3u8]           → Blocks HLS streams that crash ffmpeg-static (exit code -11).
-  //   With H.264 + -c:v copy, ffmpeg just cuts and remuxes — no encode, near-instant.
+  // ─── Format selector ─────────────────────────────────────────────────────
+  // noHLS: Blocks HLS (m3u8) streams — they can crash ffmpeg-static (exit -11)
+  // h264Only: Enforces H.264 for 1080p and below — allows fast stream-copy via ffmpeg
+  // For 4K/2K YouTube only provides VP9/AV1, so H.264 filter is intentionally omitted
   const noHLS = '[protocol!=m3u8][protocol!=m3u8_native]';
-  const h264Only = '[vcodec^=avc1]'; // Must be H.264 for stream-copy to work
+  const h264Only = '[vcodec^=avc1]';
   let formatSelector;
+
   if (isAudio) {
     formatSelector = `ba${noHLS}/ba`;
+
   } else if (quality === '4K' || quality === '2160p') {
-    // 4K requires VP9/AV1 since YouTube does not offer H.264 at resolutions above 1080p
-    formatSelector = `bv*[height<=2160]${noHLS}+ba${noHLS}/b[height<=2160]${noHLS}`;
+    // YouTube 4K is exclusively VP9/AV1 — enforce height>=1440 so we never fall to low quality
+    formatSelector = `bv*[height>=1440][height<=2160]${noHLS}+ba${noHLS}/bv*[height>=1440]${noHLS}+ba${noHLS}/bv*[height<=2160]${noHLS}+ba${noHLS}`;
+
   } else if (quality === '2K' || quality === '1440p') {
-    // 2K/1440p requires VP9/AV1
-    formatSelector = `bv*[height<=1440]${noHLS}+ba${noHLS}/b[height<=1440]${noHLS}`;
+    // 2K: enforce height>=1080 so we don't silently fall to 720p
+    formatSelector = `bv*[height>=1080][height<=1440]${noHLS}+ba${noHLS}/bv*[height<=1440]${noHLS}+ba${noHLS}`;
+
   } else {
-    // Quality resolutions e.g. '1080p', '720p', '480p', '360p'
+    // Standard resolutions (1080p / 720p / 480p / 360p) — prefer H.264 for fast remux
     const h = parseInt(quality) || 1080;
-    formatSelector = `bv*[height<=${h}][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=${h}]${h264Only}${noHLS}+ba${noHLS}/b[height<=${h}]${noHLS}`;
+    const minH = Math.round(h * 0.6); // allow up to 40% below target (e.g. 640p if asking 1080p)
+    formatSelector = [
+      `bv*[height>=${minH}][height<=${h}][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}`,
+      `bv*[height<=${h}][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}`,
+      `bv*[height<=${h}]${h264Only}${noHLS}+ba${noHLS}`,
+      `b[height<=${h}]${noHLS}`,
+    ].join('/');
   }
 
-  // Build yt-dlp argument list
+  // ─── Build yt-dlp argument list ───────────────────────────────────────────
   const isTranscode = !isAudio && ['1080p', '720p', '480p', '360p'].includes(quality);
   const postprocessorArgs = isTranscode
     ? 'ffmpeg:-c:v libx264 -preset ultrafast -crf 23 -c:a aac -loglevel warning'
     : 'ffmpeg:-c copy -avoid_negative_ts make_zero -loglevel warning';
 
   const args = [
-    ...commonArgs(),
+    ...commonArgs(quality),
     '--download-sections', `*${start}-${end}`,
     '--newline',
     '--progress',
