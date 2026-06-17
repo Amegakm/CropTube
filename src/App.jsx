@@ -507,9 +507,15 @@ export default function App() {
     fetch('/api/extract/initiate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: youtubeUrl, start: startTime, end: endTime, format: selectedFormat, quality: selectedQuality, cookies })
+      body: JSON.stringify({ url: youtubeUrl, start: startTime, end: endTime, format: selectedFormat, quality: selectedQuality })
     })
-      .then(r => { if (!r.ok) return r.json().then(d => { throw new Error(d.error); }); return r.json(); })
+      .then(async r => {
+        const text = await r.text();
+        let d;
+        try { d = JSON.parse(text); } catch (_) { throw new Error(`Server returned invalid response (${r.status}): ${text.slice(0, 200)}`); }
+        if (!r.ok) throw new Error(d.error || `Server error ${r.status}`);
+        return d;
+      })
       .then(({ fileId }) => {
         setCurrentStep(2);
         const es = new EventSource(`/api/extract/stream?fileId=${fileId}`);

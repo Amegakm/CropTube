@@ -327,50 +327,55 @@ const activeJobs = new Map();
 
 // Step 1: Initiate job, cache parameters, write temporary cookie file if provided
 app.post('/api/extract/initiate', (req, res) => {
-  const { url, start, end, format, quality, cookies } = req.body;
+  try {
+    const { url, start, end, format, quality, cookies } = req.body;
 
-  if (!url || !start || !end) {
-    return res.status(400).json({ error: 'Missing required parameters: url, start, end timestamps.' });
-  }
-
-  const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-  const cookiePath = path.join(tempDir, `cookies_${fileId}.txt`);
-  let hasCookies = false;
-
-  if (cookies && cookies.trim()) {
-    try {
-      fs.writeFileSync(cookiePath, cookies.trim(), 'utf8');
-      hasCookies = true;
-      console.log(`[Cookies] Cached temporary Netscape cookie file for Job: ${fileId}`);
-    } catch (err) {
-      console.error('[Cookies] Failed to write temporary cookie file:', err);
-      return res.status(500).json({ error: 'Failed to register authentication cookies on server.' });
+    if (!url || !start || !end) {
+      return res.status(400).json({ error: 'Missing required parameters: url, start, end timestamps.' });
     }
-  }
 
-  // Register job
-  activeJobs.set(fileId, {
-    url,
-    start,
-    end,
-    format: format || 'mp4',
-    quality,
-    hasCookies,
-    cookiePath
-  });
+    const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const cookiePath = path.join(tempDir, `cookies_${fileId}.txt`);
+    let hasCookies = false;
 
-  // Automatically expire job parameters after 5 minutes to prevent memory leaks
-  setTimeout(() => {
-    if (activeJobs.has(fileId)) {
-      const job = activeJobs.get(fileId);
-      if (job.hasCookies && fs.existsSync(job.cookiePath)) {
-        try { fs.unlinkSync(job.cookiePath); } catch (e) {}
+    if (cookies && cookies.trim()) {
+      try {
+        fs.writeFileSync(cookiePath, cookies.trim(), 'utf8');
+        hasCookies = true;
+        console.log(`[Cookies] Cached temporary Netscape cookie file for Job: ${fileId}`);
+      } catch (err) {
+        console.error('[Cookies] Failed to write temporary cookie file:', err);
+        return res.status(500).json({ error: 'Failed to register authentication cookies on server.' });
       }
-      activeJobs.delete(fileId);
     }
-  }, 5 * 60 * 1000);
 
-  return res.json({ fileId });
+    // Register job
+    activeJobs.set(fileId, {
+      url,
+      start,
+      end,
+      format: format || 'mp4',
+      quality,
+      hasCookies,
+      cookiePath
+    });
+
+    // Automatically expire job parameters after 5 minutes to prevent memory leaks
+    setTimeout(() => {
+      if (activeJobs.has(fileId)) {
+        const job = activeJobs.get(fileId);
+        if (job.hasCookies && fs.existsSync(job.cookiePath)) {
+          try { fs.unlinkSync(job.cookiePath); } catch (e) {}
+        }
+        activeJobs.delete(fileId);
+      }
+    }, 5 * 60 * 1000);
+
+    return res.json({ fileId });
+  } catch (err) {
+    console.error('[Initiate] Unexpected error:', err);
+    return res.status(500).json({ error: `Internal server error: ${err.message}` });
+  }
 });
 
 // Step 2: Stream logs via SSE using the cached job settings
