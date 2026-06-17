@@ -1,13 +1,17 @@
 # Use official Node.js runtime as parent image
 FROM node:20-bookworm-slim
 
-# Install system dependencies (ffmpeg, python3, curl)
+# Install system dependencies (ffmpeg, python3, pip, curl)
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     python3 \
+    python3-pip \
     curl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Install curl_cffi for yt-dlp chrome impersonation
+RUN pip3 install --break-system-packages curl_cffi
 
 # Install yt-dlp globally
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
