@@ -532,7 +532,7 @@ export default function App() {
 
             } else if (payload.type === 'error') {
               setLogs(p => [...p, { text: `❌ ${payload.message}`, type: 'error' }]);
-              setExtracting(false); setCurrentStep(0); es.close();
+              setExtracting(false); setCurrentStep(0); setShowRawLogs(true); es.close();
 
             } else if (payload.type === 'complete') {
               const { fileId: fid, filename } = payload.message;
@@ -565,12 +565,12 @@ export default function App() {
             text: '⚠️ SSE tunnel dropped — extraction may still be running on the server.',
             type: 'error'
           }]);
-          setExtracting(false); setCurrentStep(0); es.close();
+          setExtracting(false); setCurrentStep(0); setShowRawLogs(true); es.close();
         };
       })
       .catch(err => {
         setLogs(p => [...p, { text: `❌ ${err.message}`, type: 'error' }]);
-        setExtracting(false); setCurrentStep(0);
+        setExtracting(false); setCurrentStep(0); setShowRawLogs(true);
       });
   };
 
@@ -1029,27 +1029,47 @@ export default function App() {
 
               {/* Action Trigger / Progress Button */}
               <div className="pt-2 border-t border-slate-900/40">
-                {extracting ? (
+                {(extracting || logs.length > 0) ? (
                   <div className="w-full bg-slate-900/50 border border-slate-800 rounded-xl p-3.5 space-y-2.5 shadow-inner">
                     <div className="flex justify-between items-center text-xs">
-                      <div className="flex items-center gap-2 text-indigo-400 font-semibold">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>{currentStep === 1 ? 'Initialising...' : 'Slicing Stream...'}</span>
+                      <div className="flex items-center gap-2 font-semibold">
+                        {extracting ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                            <span className="text-indigo-400">{currentStep === 1 ? 'Initialising...' : 'Slicing Stream...'}</span>
+                          </>
+                        ) : logs.some(log => log.type === 'error') ? (
+                          <span className="text-rose-400 flex items-center gap-1">⚠️ Extraction Failed</span>
+                        ) : (
+                          <span className="text-emerald-400">✅ Clip Ready</span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <button
                           onClick={() => setShowRawLogs(v => !v)}
                           className="text-[9px] font-mono text-white/50 hover:text-white border border-white/10 px-2 py-0.5 rounded bg-white/5 transition-colors"
                         >
                           {showRawLogs ? 'Hide Logs' : 'View Logs'}
                         </button>
-                        <span className="font-mono font-bold text-indigo-400">{progress.toFixed(1)}%</span>
+                        {!extracting && (
+                          <button
+                            onClick={() => { setLogs([]); setProgress(0); }}
+                            className="text-[9px] font-mono text-rose-400 hover:text-rose-300 border border-rose-950/40 px-2 py-0.5 rounded bg-rose-950/20 transition-colors font-bold"
+                          >
+                            Close
+                          </button>
+                        )}
+                        <span className="font-mono font-bold text-slate-400">{progress.toFixed(1)}%</span>
                       </div>
                     </div>
 
                     <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden relative border border-slate-900">
                       <div
-                        className="h-full bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 rounded-full transition-all duration-300 ease-out relative"
+                        className={`h-full rounded-full transition-all duration-300 ease-out relative ${
+                          logs.some(log => log.type === 'error')
+                            ? 'bg-rose-600'
+                            : 'bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500'
+                        }`}
                         style={{ width: `${progress}%` }}
                       >
                         <div className="absolute inset-0 bg-white/20 animate-pulse" />
