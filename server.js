@@ -114,10 +114,10 @@ function ytdlpEnv() {
  *   - 'web'         → required for 4K / 2K (android doesn't serve those streams)
  */
 function commonArgs(quality = '') {
-  // Always use the 'web' player client. Mobile clients like 'android' suffer from
-  // server-side SABR constraints on YouTube, which skip high-quality DASH formats
-  // and force low-quality fallback streams (e.g. 360p itag 18).
-  const playerClient = 'web';
+  // Use 'android_vr' to bypass complex n-sig JS challenges and datacenter 429s, 
+  // as it provides all high-quality DASH formats (1080p, 4K) reliably.
+  // Fallback to 'web' and 'android' just in case.
+  const playerClient = 'android_vr,web,android';
 
   const args = [
     '--ignore-config',
