@@ -460,13 +460,19 @@ export default function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cookies })
     })
-      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(async r => {
+        if (!r.ok) {
+          const errData = await r.json().catch(() => ({}));
+          throw new Error(errData.error || 'Failed to save cookies.');
+        }
+        return r.json();
+      })
       .then(() => {
         setHasGlobalCookies(true);
         setCookiesExpired(false);
         alert('✅ Cookies registered on cloud server! Works from all devices now.');
       })
-      .catch(() => alert('Failed to save cookies.'));
+      .catch((err) => alert(err.message));
   };
 
   const deleteCookies = () => {

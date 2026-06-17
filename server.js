@@ -59,8 +59,21 @@ const localYtdlpPath = path.join(binDir, ytdlpFilename);
 const globalCookiePath = path.join(binDir, 'global_cookies.txt');
 
 // Create necessary folders
+if (!fs.existsSync(binDir)) {
+  try {
+    fs.mkdirSync(binDir, { recursive: true });
+    console.log(`[Initialization] Created bin directory at: ${binDir}`);
+  } catch (err) {
+    console.error(`[Initialization] Failed to create bin directory:`, err);
+  }
+}
 if (!fs.existsSync(tempDir)) {
-  fs.mkdirSync(tempDir, { recursive: true });
+  try {
+    fs.mkdirSync(tempDir, { recursive: true });
+    console.log(`[Initialization] Created temp directory at: ${tempDir}`);
+  } catch (err) {
+    console.error(`[Initialization] Failed to create temp directory:`, err);
+  }
 }
 
 /**
@@ -580,7 +593,7 @@ app.post('/api/settings/cookies', (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[Settings] Failed to write global cookies file:', err);
-    res.status(500).json({ error: 'Failed to write cookies file on server.' });
+    res.status(500).json({ error: `Failed to write cookies file on server: ${err.message}` });
   }
 });
 
@@ -594,7 +607,7 @@ app.delete('/api/settings/cookies', (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[Settings] Failed to delete global cookies file:', err);
-    res.status(500).json({ error: 'Failed to purge cookies file on server.' });
+    res.status(500).json({ error: `Failed to purge cookies file on server: ${err.message}` });
   }
 });
 
