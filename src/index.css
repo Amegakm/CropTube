@@ -8,6 +8,12 @@
   }
 }
 
+/* Custom style to blend select options with the dark background */
+select option {
+  background-color: #0b1329 !important;
+  color: #f1f5f9 !important;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { @apply bg-slate-950; }
@@ -50,3 +56,83 @@
 /* Spin slow */
 @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .animate-spin-slow { animation: spin-slow 8s linear infinite; }
+
+/* Fiery-glow gradient background to match reference design */
+.fiery-glow {
+  background: radial-gradient(circle at 10% 90%, rgba(239, 68, 68, 0.22) 0%, transparent 45%),
+              radial-gradient(circle at 90% 10%, rgba(99, 102, 241, 0.18) 0%, transparent 55%),
+              radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 60%),
+              #030712;
+}
+
+/* Beautiful serif accent styling */
+.font-serif-accent {
+  font-family: 'Instrument Serif', 'Playfair Display', Georgia, serif;
+}
+
+/* Premium Glassmorphic style */
+.glass-panel {
+  background: rgba(11, 17, 34, 0.45) !important;
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 
+    0 24px 50px -12px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
+}
+
+/* Animated dynamic mesh background */
+.dynamic-mesh-bg {
+  background-color: #02040a;
+  background-image: 
+    radial-gradient(circle at 20% 30%, rgba(37, 99, 235, 0.22) 0%, transparent 45%),
+    radial-gradient(circle at 80% 70%, rgba(128, 0, 32, 0.25) 0%, transparent 50%),
+    radial-gradient(circle at 50% 20%, rgba(29, 78, 216, 0.18) 0%, transparent 40%),
+    radial-gradient(circle at 10% 80%, rgba(153, 27, 27, 0.2) 0%, transparent 45%),
+    radial-gradient(circle at 90% 10%, rgba(59, 130, 246, 0.15) 0%, transparent 35%);
+  background-size: 200% 200%;
+  animation: meshDrift 20s ease infinite alternate;
+}
+
+
+@keyframes meshDrift {
+  0% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+  100% {
+    background-position: 0% 100%;
+  }
+}
+
+/* Entry Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  opacity: 0;
+  animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animation-delay-100 {
+  animation-delay: 100ms;
+}
+
+.animation-delay-200 {
+  animation-delay: 200ms;
+}
+
+.animation-delay-300 {
+  animation-delay: 300ms;
+}
+

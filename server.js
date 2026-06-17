@@ -159,12 +159,160 @@ async function resolveYtdlpPath() {
 // API ROUTES
 // ----------------------------------------------------
 
+// GET /api/search: Search YouTube videos using yt-dlp
+app.get('/api/search', async (req, res) => {
+  const { q } = req.query;
+  if (!q) {
+    return res.status(400).json({ error: 'Missing search query.' });
+  }
+
+  let ytdlpCmd;
+  try {
+    ytdlpCmd = await resolveYtdlpPath();
+  } catch (err) {
+    return res.status(500).json({ error: `Dependency Resolution Error: ${err.message}` });
+  }
+
+  // Use ytsearch5 to get top 5 results quickly
+  const args = [
+    `ytsearch5:${q}`,
+    '--flat-playlist',
+    '--dump-single-json',
+    '--no-playlist',
+    '--no-warnings',
+    '--no-check-formats',
+    '--extractor-args', 'youtube:skip=hls,dash,player,configs'
+  ];
+
+  if (fs.existsSync(globalCookiePath)) {
+    args.push('--cookies', globalCookiePath);
+  }
+
+  console.log(`[Search] Executing search for query: "${q}"`);
+
+  const child = spawn(ytdlpCmd, args, {
+    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+  });
+  let stdoutData = '';
+  let stderrData = '';
+
+  child.stdout.on('data', (data) => {
+    stdoutData += data.toString();
+  });
+
+  child.stderr.on('data', (data) => {
+    stderrData += data.toString();
+  });
+
+  child.on('close', (code) => {
+    if (code !== 0) {
+      console.error(`[Search] yt-dlp search failed with exit code ${code}: ${stderrData}`);
+      return res.status(500).json({ error: 'Search failed. Please try again.' });
+    }
+
+    try {
+      const parsed = JSON.parse(stdoutData);
+      const entries = (parsed.entries || []).map(entry => ({
+        id: entry.id,
+        url: entry.url || `https://www.youtube.com/watch?v=${entry.id}`,
+        title: entry.title,
+        duration: entry.duration,
+        uploader: entry.uploader,
+        thumbnails: entry.thumbnails || []
+      }));
+      res.json({ entries });
+    } catch (parseErr) {
+      console.error('[Search] Failed to parse search JSON:', parseErr);
+      res.status(500).json({ error: 'Failed to process search results.' });
+    }
+  });
+});
+
+// GET /api/formats: Get available resolutions and formats for a YouTube video
+app.get('/api/formats', async (req, res) => {
+  const { url } = req.query;
+  if (!url) {
+    return res.status(400).json({ error: 'Missing video URL.' });
+  }
+
+  let ytdlpCmd;
+  try {
+    ytdlpCmd = await resolveYtdlpPath();
+  } catch (err) {
+    return res.status(500).json({ error: `Dependency Resolution Error: ${err.message}` });
+  }
+
+  const args = [
+    '--ignore-config',
+    '--dump-single-json',
+    '--skip-download',
+    '--no-warnings',
+    '--no-playlist',
+    '--js-runtimes', `node:${process.execPath}`,
+    '--impersonate', 'chrome'
+  ];
+
+  if (fs.existsSync(globalCookiePath)) {
+    args.push('--cookies', globalCookiePath);
+  }
+
+  args.push(url);
+
+  console.log(`[Formats] Fetching formats for: "${url}"`);
+
+  const child = spawn(ytdlpCmd, args, {
+    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+  });
+  let stdoutData = '';
+  let stderrData = '';
+
+  child.stdout.on('data', (data) => {
+    stdoutData += data.toString();
+  });
+
+  child.stderr.on('data', (data) => {
+    stderrData += data.toString();
+  });
+
+  child.on('close', (code) => {
+    if (code !== 0) {
+      console.error(`[Formats] yt-dlp failed with exit code ${code}: ${stderrData}`);
+      return res.status(500).json({ error: 'Failed to retrieve video formats.' });
+    }
+
+    try {
+      const parsed = JSON.parse(stdoutData);
+      const formats = parsed.formats || [];
+      
+      const videoFormats = formats.filter(f => f.vcodec !== 'none' && f.height);
+      const audioFormats = formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none');
+
+      const heights = Array.from(new Set(videoFormats.map(f => f.height)))
+        .sort((a, b) => b - a);
+
+      const videoExts = Array.from(new Set(videoFormats.map(f => f.ext))).filter(e => e === 'mp4' || e === 'mkv' || e === 'webm');
+      const audioExts = Array.from(new Set(audioFormats.map(f => f.ext))).filter(e => e === 'mp3' || e === 'm4a' || e === 'opus');
+
+      res.json({
+        title: parsed.title,
+        duration: parsed.duration,
+        heights: heights.map(h => `${h}p`),
+        videoFormats: videoExts.length > 0 ? videoExts : ['mp4', 'mkv'],
+        audioFormats: audioExts.length > 0 ? audioExts : ['mp3', 'm4a']
+      });
+    } catch (parseErr) {
+      console.error('[Formats] Failed to parse JSON:', parseErr);
+      res.status(500).json({ error: 'Failed to process format list.' });
+    }
+  });
+});
+
 // Active extraction jobs registry
 const activeJobs = new Map();
 
 // Step 1: Initiate job, cache parameters, write temporary cookie file if provided
 app.post('/api/extract/initiate', (req, res) => {
-  const { url, start, end, quality, cookies } = req.body;
+  const { url, start, end, format, quality, cookies } = req.body;
 
   if (!url || !start || !end) {
     return res.status(400).json({ error: 'Missing required parameters: url, start, end timestamps.' });
@@ -190,6 +338,7 @@ app.post('/api/extract/initiate', (req, res) => {
     url,
     start,
     end,
+    format: format || 'mp4',
     quality,
     hasCookies,
     cookiePath
@@ -232,7 +381,6 @@ app.get('/api/extract/stream', async (req, res) => {
   const logToClient = (type, message) => {
     res.write(`data: ${JSON.stringify({ type, message })}\n\n`);
   };
-
   logToClient('log', '⚡ Establishing SSE tunnel with CropTube extraction backend...');
 
   if (!fileId || !activeJobs.has(fileId)) {
@@ -241,7 +389,7 @@ app.get('/api/extract/stream', async (req, res) => {
   }
 
   const job = activeJobs.get(fileId);
-  const { url, start, end, quality, hasCookies, cookiePath } = job;
+  const { url, start, end, format, quality, hasCookies, cookiePath } = job;
 
   // Basic validation of start/end format
   const timeRegex = /^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
@@ -258,7 +406,9 @@ app.get('/api/extract/stream', async (req, res) => {
     return res.end();
   }
 
-  const outputFilename = `croptube_${fileId}.mp4`;
+  const targetFormat = format || 'mp4';
+  const isAudio = targetFormat === 'mp3' || targetFormat === 'm4a' || targetFormat === 'opus' || targetFormat === 'webm-audio';
+  let outputFilename = `croptube_${fileId}.${targetFormat === 'webm-audio' ? 'webm' : targetFormat}`;
   const outputPath = path.join(tempDir, outputFilename);
 
   // Map quality constraints.
@@ -271,47 +421,50 @@ app.get('/api/extract/stream', async (req, res) => {
   const noHLS = '[protocol!=m3u8][protocol!=m3u8_native]';
   const h264Only = '[vcodec^=avc1]'; // Must be H.264 for stream-copy to work
   let formatSelector;
-  if (quality === '4K') {
+  if (isAudio) {
+    formatSelector = `ba${noHLS}/ba`;
+  } else if (quality === '4K' || quality === '2160p') {
     // 4K requires VP9/AV1 since YouTube does not offer H.264 at resolutions above 1080p
     formatSelector = `bv*[height<=2160]${noHLS}+ba${noHLS}/b[height<=2160]${noHLS}`;
-  } else if (quality === '2K') {
+  } else if (quality === '2K' || quality === '1440p') {
     // 2K/1440p requires VP9/AV1
     formatSelector = `bv*[height<=1440]${noHLS}+ba${noHLS}/b[height<=1440]${noHLS}`;
-  } else if (quality === '1080p') {
-    formatSelector = `bv*[height<=1080][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=1080]${h264Only}${noHLS}+ba${noHLS}/b[height<=1080]${noHLS}`;
-  } else if (quality === '720p') {
-    formatSelector = `bv*[height<=720][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=720]${h264Only}${noHLS}+ba${noHLS}/b[height<=720]${noHLS}`;
-  } else if (quality === '480p') {
-    formatSelector = `bv*[height<=480][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=480]${h264Only}${noHLS}+ba${noHLS}/b[height<=480]${noHLS}`;
-  } else if (quality === '360p') {
-    formatSelector = `bv*[height<=360][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=360]${h264Only}${noHLS}+ba${noHLS}/b[height<=360]${noHLS}`;
   } else {
-    formatSelector = `bv*[height<=1080][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=1080]${h264Only}${noHLS}+ba${noHLS}/b[height<=1080]${noHLS}`;
+    // Quality resolutions e.g. '1080p', '720p', '480p', '360p'
+    const h = parseInt(quality) || 1080;
+    formatSelector = `bv*[height<=${h}][ext=mp4]${h264Only}${noHLS}+ba[ext=m4a]${noHLS}/bv*[height<=${h}]${h264Only}${noHLS}+ba${noHLS}/b[height<=${h}]${noHLS}`;
   }
 
   // Build arguments list
-  const isTranscode = ['1080p', '720p', '480p', '360p'].includes(quality);
+  const isTranscode = !isAudio && ['1080p', '720p', '480p', '360p'].includes(quality);
   const postprocessorArgs = isTranscode
     ? 'ffmpeg:-c:v libx264 -preset ultrafast -crf 23 -c:a aac -loglevel warning'
     : 'ffmpeg:-c copy -avoid_negative_ts make_zero -loglevel warning';
 
   const args = [
+    '--ignore-config',
     '--download-sections', `*${start}-${end}`,
-    // --force-keyframes-at-cuts is INTENTIONALLY REMOVED.
-    // That flag causes ffmpeg to re-encode ALL frames at cut points, even for H.264 input.
-    // On Render's shared CPU: 2-4 fps encode speed = a 24s clip takes 4+ minutes = timeout.
-    // Without it, yt-dlp stream-copies DASH segments directly (no encode, done in seconds).
-    // Cut accuracy: snaps to nearest existing keyframe in the stream (~0-2s). Acceptable tradeoff.
-
-    // Transcode or stream-copy based on quality
-    '--postprocessor-args', postprocessorArgs,
-
     // Use Node.js JS runtime for yt-dlp's JS challenge solver
     '--js-runtimes', `node:${process.execPath}`,
-    // ALWAYS apply client cascade — TV + web_creator bypass YouTube bot checks.
-    // Cookies are additive auth, not required. Expired cookies won't hard-fail extraction.
-    '--extractor-args', 'youtube:player_client=tv,web_creator,android',
+    '--impersonate', 'chrome',
+    '--newline',
+    '--progress',
   ];
+
+  if (isAudio) {
+    args.push('-x');
+    if (targetFormat === 'm4a') {
+      args.push('--audio-format', 'm4a');
+    } else if (targetFormat === 'webm-audio') {
+      args.push('--audio-format', 'webm');
+    } else {
+      const bitrate = quality.replace('audio-', '').split('-')[0] || '192';
+      args.push('--audio-format', targetFormat);
+      args.push('--audio-quality', `${bitrate}K`);
+    }
+  } else {
+    args.push('--postprocessor-args', postprocessorArgs);
+  }
 
   // Add cookies if available (treats them as additive, not required)
   if (hasCookies) {
@@ -326,9 +479,13 @@ app.get('/api/extract/stream', async (req, res) => {
   // or missing ffmpeg and also ensures our resolved (system > static) binary is used
   args.push('--ffmpeg-location', resolvedFFmpegPath);
 
+  args.push('-f', formatSelector);
+  
+  if (!isAudio) {
+    args.push('--merge-output-format', targetFormat);
+  }
+
   args.push(
-    '-f', formatSelector,
-    '--merge-output-format', 'mp4',
     '--no-playlist',
     // Prefer DASH streams over HLS (m3u8). HLS streams (format 96) sent by TV client
     // require ffmpeg to handle live-segment stitching which can crash ffmpeg-static.
@@ -340,7 +497,9 @@ app.get('/api/extract/stream', async (req, res) => {
   logToClient('log', `🎬 Initiating surgical stream-seek for duration [${start} to ${end}]`);
   logToClient('log', `🚀 Executing: yt-dlp --download-sections "*${start}-${end}" -f "${formatSelector}" --postprocessor-args "${postprocessorArgs}" [URL]`);
 
-  const child = spawn(ytdlpCmd, args);
+  const child = spawn(ytdlpCmd, args, {
+    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+  });
 
   child.stdout.on('data', (data) => {
     const lines = data.toString().split('\n');
@@ -442,15 +601,24 @@ app.delete('/api/settings/cookies', (req, res) => {
 // Download Endpoint - Downloads clip then immediately cleans it up
 app.get('/api/download/:fileId', (req, res) => {
   const { fileId } = req.params;
-  const filePath = path.join(tempDir, `croptube_${fileId}.mp4`);
 
-  if (!fs.existsSync(filePath)) {
+  if (!fs.existsSync(tempDir)) {
     return res.status(404).send('Error: Clip file not found or has already been deleted.');
   }
 
+  const files = fs.readdirSync(tempDir);
+  const matchedFile = files.find(f => f.startsWith(`croptube_${fileId}`));
+
+  if (!matchedFile) {
+    return res.status(404).send('Error: Clip file not found or has already been deleted.');
+  }
+
+  const filePath = path.join(tempDir, matchedFile);
+  const ext = path.extname(matchedFile);
+
   console.log(`[Delivery] Serving file to client: ${filePath}`);
   
-  res.download(filePath, `CropTube_Clip_${fileId}.mp4`, (err) => {
+  res.download(filePath, `CropTube_Clip_${fileId}${ext}`, (err) => {
     if (err) {
       console.error(`[Delivery] Error downloading file:`, err);
     }
