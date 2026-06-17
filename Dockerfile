@@ -17,7 +17,7 @@ ENV DENO_INSTALL="/root/.deno"
 ENV PATH="$DENO_INSTALL/bin:$PATH"
 
 # Install yt-dlp with [default] extras (EJS scripts) + curl_cffi (chrome impersonation)
-RUN pip3 install --break-system-packages "yt-dlp[default]" curl_cffi
+RUN pip3 install --upgrade --break-system-packages "yt-dlp[default]" curl_cffi
 
 # Set working directory
 WORKDIR /app
