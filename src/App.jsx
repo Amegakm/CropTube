@@ -980,58 +980,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Cloud Auth settings */}
-              <div className="space-y-2 pt-1 pb-1">
-                <div className="flex justify-between items-center">
-                  <button
-                    onClick={() => setShowCookies(v => !v)}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 transition-colors"
-                  >
-                    {showCookies ? '▼' : '▶'} Cloud Auth Settings
-                  </button>
-                  {hasGlobalCookies && (
-                    <span className="text-[9px] text-emerald-400 bg-emerald-950/40 border border-emerald-900 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active
-                    </span>
-                  )}
-                </div>
-                {showCookies && (
-                  <div className="p-3 bg-slate-900/40 border border-slate-800 rounded-xl space-y-2">
-                    <p className="text-[9px] text-slate-500 leading-normal">Paste Netscape-format YouTube cookies (from browser extensions)</p>
-                    <textarea
-                      value={cookies}
-                      onChange={e => setCookies(e.target.value)}
-                      placeholder={'# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t...\tSID\t...'}
-                      rows={3}
-                      disabled={extracting}
-                      className="w-full p-2 bg-slate-950 border border-slate-800 focus:border-indigo-500
-                        text-[9px] text-slate-400 font-mono rounded-lg outline-none resize-none
-                        placeholder-slate-700 disabled:opacity-50"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={saveCookies}
-                        disabled={!cookies.trim() || extracting}
-                        className="flex-1 py-1.5 rounded-lg text-[9px] font-semibold transition-colors
-                          disabled:bg-slate-900 disabled:text-slate-600 disabled:cursor-not-allowed
-                          enabled:bg-indigo-600 enabled:hover:bg-indigo-500 enabled:text-white"
-                      >
-                        Register
-                      </button>
-                      {hasGlobalCookies && (
-                        <button
-                          onClick={deleteCookies}
-                          disabled={extracting}
-                          className="px-2.5 py-1.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40
-                            text-rose-400 rounded-lg text-[9px] font-semibold transition-all"
-                        >
-                          Purge
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
 
               {/* Action Trigger / Progress Button */}
               <div className="pt-2 border-t border-slate-900/40">

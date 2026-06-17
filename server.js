@@ -262,7 +262,9 @@ app.get('/api/formats', async (req, res) => {
     '--no-warnings',
     '--no-playlist',
     '--js-runtimes', `node:${process.execPath}`,
-    '--impersonate', 'chrome'
+    '--impersonate', 'chrome',
+    '--cache-dir', path.join(tempDir, 'cache'),
+    '--remote-components', 'ejs:github'
   ];
 
   if (fs.existsSync(globalCookiePath)) {
@@ -274,7 +276,7 @@ app.get('/api/formats', async (req, res) => {
   console.log(`[Formats] Fetching formats for: "${url}"`);
 
   const child = spawn(ytdlpCmd, args, {
-    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    env: { ...process.env, PYTHONUNBUFFERED: '1', HOME: tempDir, XDG_CACHE_HOME: tempDir }
   });
   let stdoutData = '';
   let stderrData = '';
@@ -460,6 +462,8 @@ app.get('/api/extract/stream', async (req, res) => {
     // Use Node.js JS runtime for yt-dlp's JS challenge solver
     '--js-runtimes', `node:${process.execPath}`,
     '--impersonate', 'chrome',
+    '--cache-dir', path.join(tempDir, 'cache'),
+    '--remote-components', 'ejs:github',
     '--newline',
     '--progress',
   ];
@@ -511,7 +515,7 @@ app.get('/api/extract/stream', async (req, res) => {
   logToClient('log', `🚀 Executing: yt-dlp --download-sections "*${start}-${end}" -f "${formatSelector}" --postprocessor-args "${postprocessorArgs}" [URL]`);
 
   const child = spawn(ytdlpCmd, args, {
-    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    env: { ...process.env, PYTHONUNBUFFERED: '1', HOME: tempDir, XDG_CACHE_HOME: tempDir }
   });
 
   child.stdout.on('data', (data) => {
