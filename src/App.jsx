@@ -205,7 +205,7 @@ export default function App() {
   const [selectedQuality, setSelectedQuality] = useState('1080p');
   const [availableVideoFormats, setAvailableVideoFormats] = useState(['mp4', 'mkv']);
   const [availableAudioFormats, setAvailableAudioFormats] = useState(['mp3', 'm4a']);
-  const [availableResolutions, setAvailableResolutions] = useState(['1080p', '720p', '480p', '360p']);
+  const [availableResolutions, setAvailableResolutions] = useState(['2160p', '1440p', '1080p', '720p', '480p', '360p']);
   const [isLoadingFormats, setIsLoadingFormats] = useState(false);
   const [cookies, setCookies] = useState(() => localStorage.getItem('croptube_cookies') || '');
   const [showCookies, setShowCookies] = useState(false);
@@ -395,7 +395,7 @@ export default function App() {
     if (!videoId) {
       setAvailableVideoFormats(['mp4', 'mkv']);
       setAvailableAudioFormats(['mp3', 'm4a']);
-      setAvailableResolutions(['1080p', '720p', '480p', '360p']);
+      setAvailableResolutions(['2160p', '1440p', '1080p', '720p', '480p', '360p']);
       setSelectedFormat('mp4');
       setSelectedQuality('1080p');
       return;
@@ -427,7 +427,7 @@ export default function App() {
       .catch(() => {
         setAvailableVideoFormats(['mp4', 'mkv']);
         setAvailableAudioFormats(['mp3', 'm4a']);
-        setAvailableResolutions(['1080p', '720p', '480p', '360p']);
+        setAvailableResolutions(['2160p', '1440p', '1080p', '720p', '480p', '360p']);
         setSelectedFormat('mp4');
         setSelectedQuality('1080p');
       })
