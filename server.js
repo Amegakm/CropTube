@@ -199,8 +199,11 @@ app.get('/api/formats', async (req, res) => {
     return res.status(400).json({ error: 'Missing video URL.' });
   }
 
+  // Use '4K' hint so commonArgs() picks the 'web' player client.
+  // The web client returns the full format list including 4K/2K.
+  // The android client caps at 1080p and would hide higher resolutions from the UI.
   const args = [
-    ...commonArgs(),
+    ...commonArgs('4K'),
     '--dump-single-json',
     '--skip-download',
     '--no-warnings',
