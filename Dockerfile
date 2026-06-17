@@ -10,12 +10,8 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install curl_cffi for yt-dlp chrome impersonation
-RUN pip3 install --break-system-packages curl_cffi
-
-# Install yt-dlp globally
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
-    && chmod a+rx /usr/local/bin/yt-dlp
+# Install yt-dlp with default extras (includes EJS solver scripts) and curl_cffi for chrome impersonation
+RUN pip3 install --break-system-packages "yt-dlp[default]" curl_cffi
 
 # Set working directory
 WORKDIR /app
