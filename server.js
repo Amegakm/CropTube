@@ -628,8 +628,16 @@ app.get('/api/extract/stream', async (req, res) => {
 
   child.on('error', (err) => {
     console.error(`[Extract] Process error: ${err.message}`);
-    logToClient('error', 'Clip extraction failed. Please try again.');
-    finish();
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: 'Clip extraction failed. Please try again.' })}\n\n`, 'utf8', () => {
+        finish();
+      });
+      if (typeof res.flush === 'function') {
+        res.flush();
+      }
+    } else {
+      finish();
+    }
   });
 
   child.on('close', (code) => {
@@ -637,19 +645,45 @@ app.get('/api/extract/stream', async (req, res) => {
       const fileRes = getFileResolution(outputPath);
       // Server-side diagnostic logging only
       console.log(`[Final Output] resolution=${fileRes}, postprocessor=${postprocessorArgs || 'none'}`);
-      logToClient('complete', { fileId, filename: outputFilename });
+      if (!res.writableEnded) {
+        res.write(`event: completed\ndata: ${JSON.stringify({ success: true })}\n\n`, 'utf8', () => {
+          finish();
+        });
+        if (typeof res.flush === 'function') {
+          res.flush();
+        }
+      } else {
+        finish();
+      }
     } else {
       console.error(`[Extract] Process terminated (code ${code}). Output exists: ${fs.existsSync(outputPath)}`);
       const isCookieError = stderrBuffer.includes("Sign in to confirm you're not a bot") ||
                             stderrBuffer.includes('Sign in to confirm your age') ||
                             stderrBuffer.includes('cookies have');
       if (isCookieError) {
-        logToClient('cookie_error', 'Authentication cookies may be expired. Please update your session cookies in Settings.');
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ type: 'cookie_error', message: 'Authentication cookies may be expired. Please update your session cookies in Settings.' })}\n\n`, 'utf8', () => {
+            finish();
+          });
+          if (typeof res.flush === 'function') {
+            res.flush();
+          }
+        } else {
+          finish();
+        }
       } else {
-        logToClient('error', 'Clip extraction failed. Please try again.');
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ type: 'error', message: 'Clip extraction failed. Please try again.' })}\n\n`, 'utf8', () => {
+            finish();
+          });
+          if (typeof res.flush === 'function') {
+            res.flush();
+          }
+        } else {
+          finish();
+        }
       }
     }
-    finish();
   });
 
   req.on('close', () => {
@@ -698,6 +732,7 @@ app.delete('/api/settings/cookies', (req, res) => {
 // POST /api/report: Submit an error report to Telegram
 app.post('/api/report', (req, res) => {
   const { timestamp, quality, format, browser, platform, stage, errorMessage } = req.body;
+  const youtubeUrl = req.body.youtubeUrl || req.body.youtube_url || 'N/A';
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -709,25 +744,28 @@ app.post('/api/report', (req, res) => {
 
   // Sanitize error message — strip file paths, long tokens, cookie fragments
   const sanitized = (errorMessage || 'Unknown error')
-    .replace(/\/[\w/.\-]+/g, '[path]')
-    .replace(/[A-Za-z0-9+/=]{40,}/g, '[redacted]')
+    .replace(/[A-Za-z]:\\[\w\\\s.\-]+/g, '[path]') // Windows backslash paths
+    .replace(/[A-Za-z]:\/[\w\/\s.\-]+/g, '[path]') // Windows forward slash paths
+    .replace(/\/[\w/.\-]+/g, '[path]')             // Unix paths
+    .replace(/[A-Za-z0-9+/=]{40,}/g, '[redacted]') // Long tokens / cookies
     .substring(0, 500);
 
   const text = [
-    '🚨 <b>CropTube Error Report</b>',
+    '🚨 CropTube Error Report',
     '',
-    `<b>Time:</b> ${timestamp || 'N/A'}`,
-    `<b>Quality:</b> ${quality || 'N/A'}`,
-    `<b>Format:</b> ${format || 'N/A'}`,
-    `<b>Browser:</b> ${(browser || 'N/A').substring(0, 120)}`,
-    `<b>Platform:</b> ${platform || 'N/A'}`,
-    `<b>Stage:</b> ${stage || 'N/A'}`,
+    `Time: ${timestamp || 'N/A'}`,
+    `URL: ${youtubeUrl}`,
+    `Quality: ${quality || 'N/A'}`,
+    `Format: ${format || 'N/A'}`,
+    `Browser: ${browser || 'N/A'}`,
+    `Platform: ${platform || 'N/A'}`,
+    `Stage: ${stage || 'N/A'}`,
     '',
-    '<b>Error:</b>',
+    'Error:',
     sanitized
   ].join('\n');
 
-  const payload = JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' });
+  const payload = JSON.stringify({ chat_id: chatId, text });
 
   const options = {
     hostname: 'api.telegram.org',

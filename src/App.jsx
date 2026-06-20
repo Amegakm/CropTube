@@ -476,6 +476,7 @@ export default function App() {
   const handleReport = () => {
     const reportData = {
       timestamp: new Date().toISOString(),
+      youtubeUrl: youtubeUrl,
       quality: selectedQuality,
       format: selectedFormat,
       browser: navigator.userAgent.substring(0, 150),
@@ -544,6 +545,11 @@ export default function App() {
       .then(({ fileId }) => {
         setCurrentStep(2);
         const es = new EventSource(`/api/extract/stream?fileId=${fileId}`);
+        let isCompleted = false;
+
+        es.onopen = () => {
+          console.log('[Frontend SSE] connected');
+        };
 
         es.onmessage = (evt) => {
           try {
@@ -552,6 +558,7 @@ export default function App() {
             if (data.type === 'status') {
               setStatusMessage(data.message);
             } else if (data.type === 'progress') {
+              console.log('[Frontend SSE] progress update');
               const { stage, pct } = data.message;
               setStatusMessage(stage);
               setProgress(pct);
@@ -565,6 +572,7 @@ export default function App() {
               setExtracting(false);
               setCurrentStep(0);
               es.close();
+              console.log('[Frontend SSE] eventsource closed');
             } else if (data.type === 'error') {
               setExtractionFailed(true);
               setLastError(data.message);
@@ -572,47 +580,62 @@ export default function App() {
               setExtracting(false);
               setCurrentStep(0);
               es.close();
-            } else if (data.type === 'complete') {
-              const { fileId: fid, filename } = data.message;
-              setCurrentStep(3);
-              setProgress(100);
-              setStatusMessage('Download ready.');
-              setExtractionComplete(true);
-              setClipsHistory(p => [{
-                id: fid, title: `Clip (${startTime} – ${endTime})`,
-                url: youtubeUrl, videoId, start: startTime, end: endTime,
-                duration: secsToHMS(e - s), timestamp: new Date().toLocaleTimeString()
-              }, ...p]);
-
-              const dlExt = selectedFormat === 'webm-audio' ? 'webm' : (selectedFormat === 'mp3' ? 'mp3' : selectedFormat);
-              const link = document.createElement('a');
-              link.href = `/api/download/${fid}`;
-              link.download = `CropTube_Clip_${fid}.${dlExt}`;
-              document.body.appendChild(link);
-
-              // Short delay to let browser process click before cleanup
-              setTimeout(() => {
-                link.click();
-                document.body.removeChild(link);
-              }, 100);
-
-              // Delay SSE close and state reset so the download request reaches the server first
-              setTimeout(() => {
-                setExtracting(false);
-                setCurrentStep(0);
-                es.close();
-              }, 1000);
+              console.log('[Frontend SSE] eventsource closed');
             }
           } catch (_) { }
         };
 
+        es.addEventListener('completed', (evt) => {
+          console.log('[Frontend SSE] completed event received');
+          isCompleted = true;
+          setExtractionComplete(true);
+          setExtractionFailed(false);
+          setLastError('');
+          setProgress(100);
+          setStatusMessage('Download ready.');
+
+          setClipsHistory(p => [{
+            id: fileId, title: `Clip (${startTime} – ${endTime})`,
+            url: youtubeUrl, videoId, start: startTime, end: endTime,
+            duration: secsToHMS(e - s), timestamp: new Date().toLocaleTimeString()
+          }, ...p]);
+
+          const dlExt = selectedFormat === 'webm-audio' ? 'webm' : (selectedFormat === 'mp3' ? 'mp3' : selectedFormat);
+          const link = document.createElement('a');
+          link.href = `/api/download/${fileId}`;
+          link.download = `CropTube_Clip_${fileId}.${dlExt}`;
+          document.body.appendChild(link);
+
+          // Short delay to let browser process click before cleanup
+          setTimeout(() => {
+            console.log('[Frontend SSE] download triggered');
+            link.click();
+            document.body.removeChild(link);
+          }, 100);
+
+          // Delay SSE close and state reset so the download request reaches the server first
+          setTimeout(() => {
+            setExtracting(false);
+            setCurrentStep(0);
+            es.close();
+            console.log('[Frontend SSE] eventsource closed');
+          }, 1000);
+        });
+
         es.onerror = () => {
+          console.log('[Frontend SSE] onerror triggered');
+          if (isCompleted) {
+            es.close();
+            console.log('[Frontend SSE] eventsource closed');
+            return;
+          }
           setExtractionFailed(true);
           setLastError('Connection lost. The clip may still be processing on the server.');
           setStatusMessage('');
           setExtracting(false);
           setCurrentStep(0);
           es.close();
+          console.log('[Frontend SSE] eventsource closed');
         };
       })
       .catch(err => {
@@ -1229,8 +1252,8 @@ export default function App() {
                         <div key={clip.id} className="flex justify-between items-center bg-black/40 border border-white/5 px-3 py-2 rounded-xl hover:border-white/10 transition-colors">
                           <div>
                             <p className="text-[11px] font-medium text-white/80">{clip.title}</p>
-                            <p className="text-[9px] text-white/40 font-mono">
-                              {clip.duration} · {clip.timestamp}
+                            <p className="text-[9px] text-slate-400 font-mono">
+                              <span className="text-emerald-400 font-semibold mr-1">✓ Success</span> · {clip.duration} · {clip.timestamp}
                             </p>
                           </div>
                           <a href={`/api/download/${clip.id}`} className="text-[10px] text-indigo-300 hover:text-indigo-200 flex items-center gap-1 font-semibold">
