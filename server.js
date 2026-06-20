@@ -42,6 +42,42 @@ const resolvedFFmpegPath = resolveFFmpegPath();
 // Ensure yt-dlp can find ffmpeg no matter how it's invoked
 process.env.FFMPEG_BINARY = resolvedFFmpegPath;
 
+function resolveFfprobePath() {
+  try {
+    const sysPath = execSync(process.platform === 'win32' ? 'where ffprobe' : 'which ffprobe')
+      .toString().trim().split('\n')[0].trim();
+    if (sysPath) {
+      console.log(`[Auto-Setup] System ffprobe found at: ${sysPath} — using system binary.`);
+      return sysPath;
+    }
+  } catch (_) { /* not in PATH */ }
+
+  const ffmpegDir = path.dirname(resolvedFFmpegPath);
+  const staticFfprobe = path.join(ffmpegDir, process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
+  if (fs.existsSync(staticFfprobe)) {
+    console.log(`[Auto-Setup] Static ffprobe found at: ${staticFfprobe}`);
+    return staticFfprobe;
+  }
+
+  console.log(`[Auto-Setup] WARNING — ffprobe not found. Resolution verification will be bypassed.`);
+  return null;
+}
+const resolvedFfprobePath = resolveFfprobePath();
+
+function getFileResolution(filePath) {
+  if (!resolvedFfprobePath || !fs.existsSync(filePath)) {
+    return 'unknown';
+  }
+  try {
+    const res = execSync(`"${resolvedFfprobePath}" -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "${filePath}"`)
+      .toString().trim();
+    return res || 'audio-only';
+  } catch (err) {
+    console.error('[ffprobe] Failed to read resolution:', err);
+    return 'error';
+  }
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -106,18 +142,20 @@ function ytdlpEnv() {
   return { ...process.env, PYTHONUNBUFFERED: '1', HOME: tempDir, XDG_CACHE_HOME: cacheDir };
 }
 
-/**
- * Common yt-dlp flags shared by every invocation.
- *
- * playerClient strategy:
- *   - 'android,web' → fast, good bot-resistance, but android caps at 1080p
- *   - 'web'         → required for 4K / 2K (android doesn't serve those streams)
- */
-function commonArgs(quality = '') {
-  // Use 'android_vr' to bypass complex n-sig JS challenges and datacenter 429s, 
-  // as it provides all high-quality DASH formats (1080p, 4K) reliably.
-  // Fallback to 'web' and 'android' just in case.
-  const playerClient = 'android_vr,web,android';
+function getCommonArgsConfig(quality = '', customCookiePath = null) {
+  const cookiePath = customCookiePath || globalCookiePath;
+  const cookieExists = fs.existsSync(cookiePath);
+  let cookieSize = 0;
+  if (cookieExists) {
+    try {
+      cookieSize = fs.statSync(cookiePath).size;
+    } catch (_) {}
+  }
+  const hasValidCookies = cookieExists && cookieSize > 0;
+
+  // If cookies are active, prioritize 'web' since mobile clients do not support cookies in yt-dlp.
+  // Otherwise, use the standard android_vr,web,android client stack.
+  const playerClient = hasValidCookies ? 'web' : 'android_vr,web,android';
 
   const args = [
     '--ignore-config',
@@ -125,10 +163,16 @@ function commonArgs(quality = '') {
     '--extractor-args', `youtube:player_client=${playerClient}`,
     '--cache-dir', cacheDir,
   ];
-  if (fs.existsSync(globalCookiePath)) {
-    args.push('--cookies', globalCookiePath);
+
+  if (hasValidCookies) {
+    args.push('--cookies', cookiePath);
   }
-  return args;
+
+  return { args, playerClient, cookieExists, cookieSize };
+}
+
+function commonArgs(quality = '', customCookiePath = null) {
+  return getCommonArgsConfig(quality, customCookiePath).args;
 }
 
 // ----------------------------------------------------
@@ -201,11 +245,9 @@ app.get('/api/formats', async (req, res) => {
     return res.status(400).json({ error: 'Missing video URL.' });
   }
 
-  // Use '4K' hint so commonArgs() picks the 'web' player client.
-  // The web client returns the full format list including 4K/2K.
-  // The android client caps at 1080p and would hide higher resolutions from the UI.
+  const config = getCommonArgsConfig('4K');
   const args = [
-    ...commonArgs('4K'),
+    ...config.args,
     '--dump-single-json',
     '--skip-download',
     '--no-warnings',
@@ -214,7 +256,11 @@ app.get('/api/formats', async (req, res) => {
 
   args.push(url);
 
-  console.log(`[Formats] Fetching formats for: "${url}"`);
+  console.log(`[Format Retrieval] Trace:`);
+  console.log(`  - Cookie file exists: ${config.cookieExists}`);
+  console.log(`  - Cookie file size: ${config.cookieSize} bytes`);
+  console.log(`  - Active player_client: ${config.playerClient}`);
+  console.log(`  - Exact yt-dlp command: "${ytdlpCmd}" ${args.map(a => a.includes('cookies') ? '--cookies [path]' : a).join(' ')}`);
 
   const child = spawn(ytdlpCmd, args, { env: ytdlpEnv() });
   let stdoutData = '';
@@ -231,7 +277,17 @@ app.get('/api/formats', async (req, res) => {
   child.on('close', (code) => {
     if (code !== 0) {
       console.error(`[Formats] yt-dlp failed with exit code ${code}: ${stderrData}`);
-      return res.status(500).json({ error: 'Failed to retrieve video formats.' });
+      
+      const isBot = stderrData.includes("Sign in to confirm you're not a bot") || 
+                    stderrData.includes("Sign in to confirm your age");
+      
+      const errorMsg = isBot
+        ? (config.cookieExists 
+            ? "YouTube bot detection triggered. Your pre-registered cookies may be expired or invalid. Please update your session cookies in Settings."
+            : "YouTube bot detection triggered. Please register YouTube authentication cookies in Settings to bypass this on cloud/datacenter IPs.")
+        : "Failed to retrieve video formats.";
+
+      return res.status(isBot ? 403 : 500).json({ error: errorMsg, details: stderrData.trim() });
     }
 
     try {
@@ -247,12 +303,26 @@ app.get('/api/formats', async (req, res) => {
       const videoExts = Array.from(new Set(videoFormats.map(f => f.ext))).filter(e => e === 'mp4' || e === 'mkv' || e === 'webm');
       const audioExts = Array.from(new Set(audioFormats.map(f => f.ext))).filter(e => e === 'mp3' || e === 'm4a' || e === 'opus');
 
+      console.log(`[Format Retrieval] Success:`);
+      console.log(`  - Number of formats returned: ${formats.length}`);
+      console.log(`  - Available heights: ${heights.join(', ')}`);
+
+      const rawFormats = formats.map(f => ({
+        format_id: f.format_id,
+        height: f.height || null,
+        ext: f.ext,
+        vcodec: f.vcodec || 'none',
+        acodec: f.acodec || 'none',
+        tbr: f.tbr || null
+      }));
+
       res.json({
         title: parsed.title,
         duration: parsed.duration,
         heights: heights.map(h => `${h}p`),
         videoFormats: videoExts.length > 0 ? videoExts : ['mp4', 'mkv'],
-        audioFormats: audioExts.length > 0 ? audioExts : ['mp3', 'm4a']
+        audioFormats: audioExts.length > 0 ? audioExts : ['mp3', 'm4a'],
+        rawFormats
       });
     } catch (parseErr) {
       console.error('[Formats] Failed to parse JSON:', parseErr);
@@ -267,11 +337,16 @@ const activeJobs = new Map();
 // Step 1: Initiate job, cache parameters, write temporary cookie file if provided
 app.post('/api/extract/initiate', (req, res) => {
   try {
-    const { url, start, end, format, quality, cookies } = req.body;
+    const { url, start, end, format, quality, format_id, cookies } = req.body;
 
     if (!url || !start || !end) {
       return res.status(400).json({ error: 'Missing required parameters: url, start, end timestamps.' });
     }
+
+    console.log(`[Quality Selection] Trace:`);
+    console.log(`  - Request payload received:`, req.body);
+    console.log(`  - Selected dropdown quality label: ${quality}`);
+    console.log(`  - Selected format_id: ${format_id || 'none'}`);
 
     const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     const cookiePath = path.join(tempDir, `cookies_${fileId}.txt`);
@@ -295,11 +370,12 @@ app.post('/api/extract/initiate', (req, res) => {
       end,
       format: format || 'mp4',
       quality,
+      format_id,
       hasCookies,
       cookiePath
     });
 
-    // Automatically expire job parameters after 5 minutes to prevent memory leaks
+    // Automatically expire job parameters after 15 minutes to prevent memory leaks
     setTimeout(() => {
       if (activeJobs.has(fileId)) {
         const job = activeJobs.get(fileId);
@@ -308,7 +384,7 @@ app.post('/api/extract/initiate', (req, res) => {
         }
         activeJobs.delete(fileId);
       }
-    }, 5 * 60 * 1000);
+    }, 15 * 60 * 1000);
 
     return res.json({ fileId });
   } catch (err) {
@@ -329,8 +405,6 @@ app.get('/api/extract/stream', async (req, res) => {
   res.flushHeaders();
 
   // Send SSE keepalive pings every 20 seconds.
-  // Render's load balancer silently kills SSE connections that go idle.
-  // SSE spec allows ':' comment lines as pings — browsers/EventSource ignore them.
   const keepaliveInterval = setInterval(() => {
     if (!res.writableEnded) {
       res.write(': keepalive\n\n');
@@ -348,7 +422,7 @@ app.get('/api/extract/stream', async (req, res) => {
   }
 
   const job = activeJobs.get(fileId);
-  const { url, start, end, format, quality, hasCookies, cookiePath } = job;
+  const { url, start, end, format, quality, format_id, hasCookies, cookiePath } = job;
 
   // Basic validation of start/end format
   const timeRegex = /^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
@@ -370,55 +444,38 @@ app.get('/api/extract/stream', async (req, res) => {
   let outputFilename = `croptube_${fileId}.${targetFormat === 'webm-audio' ? 'webm' : targetFormat}`;
   const outputPath = path.join(tempDir, outputFilename);
 
-  // ─── Format selector ─────────────────────────────────────────────────────
-  // Strategy: always prefer the best stream that fits within the quality ceiling.
-  // No hard "minimum height" floors — they cause "format not available" errors when
-  // a video's max resolution is below the floor (e.g. video tops out at 1080p and user picks 4K).
-  // The UI only shows resolutions that /api/formats confirmed are actually available,
-  // so if the user selected 4K it should exist. But for safety we never hard-error.
-  //
-  // noHLS  → skip HLS (m3u8) streams; they crash ffmpeg-static with exit code -11
-  // h264   → for <=1080p: prefer H.264 so stream-copy works without re-encoding
-  //           (YouTube only offers VP9/AV1 above 1080p, so no h264 filter there)
+  console.log(`[Backend Extraction] Trace:`);
+  console.log(`  - format_id received: ${format_id || 'none'}`);
+  console.log(`  - quality received: ${quality}`);
+
+  // We require format_id! If it's missing, refuse extraction.
+  if (!format_id || format_id === 'none') {
+    console.error(`[Backend Extraction] Error: Missing format_id. Slicing aborted.`);
+    logToClient('error', 'Authentication/Extraction Error: Missing specific format selection. Please try reloading formats.');
+    clearInterval(keepaliveInterval);
+    return res.end();
+  }
+
   const noHLS = '[protocol!=m3u8][protocol!=m3u8_native]';
   let formatSelector;
 
   if (isAudio) {
-    formatSelector = `ba${noHLS}/ba`;
-
+    formatSelector = format_id;
   } else {
-    // Determine target height limit
-    let targetHeight = 1080;
-    if (quality === '4K' || quality === '2160p') {
-      targetHeight = 2160;
-    } else if (quality === '2K' || quality === '1440p') {
-      targetHeight = 1440;
-    } else {
-      targetHeight = parseInt(quality) || 1080;
-    }
-
-    // Always prefer the highest quality video stream (AV1/VP9/H.264) matching target height,
-    // combined with the best audio stream, without transcoding.
-    formatSelector = [
-      `bv*[height<=${targetHeight}]${noHLS}+ba${noHLS}`,
-      `bv*${noHLS}+ba${noHLS}`,
-      `b[height<=${targetHeight}]${noHLS}`,
-      `b${noHLS}`,
-    ].join('/');
+    // Combine the user-selected format_id with the best audio stream
+    formatSelector = `${format_id}+ba${noHLS}/bestaudio`;
   }
 
-  // ─── Build yt-dlp argument list ───────────────────────────────────────────
-  // Always use stream-copy (-c copy) — no re-encoding, 100% original quality.
-  // yt-dlp's --download-sections works correctly with -c copy; ffmpeg cuts at
-  // the nearest keyframe, so the output is within ~1s of the requested timestamps
-  // but with zero quality loss (vs ultrafast libx264 which degrades quality noticeably).
+  console.log(`  - Final yt-dlp format string: "${formatSelector}"`);
+
+  // FFmpeg stream-copy argument
   const postprocessorArgs = isAudio
     ? null
     : 'ffmpeg:-c copy -avoid_negative_ts make_zero -loglevel warning';
 
-
+  const config = getCommonArgsConfig(quality, hasCookies ? cookiePath : null);
   const args = [
-    ...commonArgs(quality),
+    ...config.args,
     '--download-sections', `*${start}-${end}`,
     '--newline',
     '--progress',
@@ -439,8 +496,7 @@ app.get('/api/extract/stream', async (req, res) => {
     args.push('--postprocessor-args', postprocessorArgs);
   }
 
-  // Log whether cookies are active
-  if (fs.existsSync(globalCookiePath)) {
+  if (config.cookieExists && config.cookieSize > 0) {
     logToClient('log', '🍪 Server-side cookies loaded (cloud auth active)...');
   }
 
@@ -456,6 +512,8 @@ app.get('/api/extract/stream', async (req, res) => {
     url,
     '-o', outputPath
   );
+
+  console.log(`  - Exact yt-dlp command executed: "${ytdlpCmd}" ${args.map(a => a.includes('cookies') ? '--cookies [path]' : a).join(' ')}`);
 
   logToClient('log', `🎬 Initiating surgical stream-seek for duration [${start} to ${end}]`);
   logToClient('log', `🚀 Executing: yt-dlp --download-sections "*${start}-${end}" -f "${formatSelector}" [URL]`);
@@ -482,8 +540,19 @@ app.get('/api/extract/stream', async (req, res) => {
     });
   });
 
-  const cleanupAll = () => {
+  let isFinished = false;
+  const finish = (err = null) => {
+    if (isFinished) return;
+    isFinished = true;
+
     clearInterval(keepaliveInterval);
+
+    if (child && !child.killed) {
+      try {
+        child.kill('SIGKILL');
+      } catch (_) {}
+    }
+
     if (hasCookies && fs.existsSync(cookiePath)) {
       try {
         fs.unlinkSync(cookiePath);
@@ -492,33 +561,42 @@ app.get('/api/extract/stream', async (req, res) => {
         console.error('[Cleanup] Failed to delete temporary cookie file:', unlinkErr);
       }
     }
+
     activeJobs.delete(fileId);
+
+    if (!res.writableEnded) {
+      res.end();
+    }
   };
 
   child.on('error', (err) => {
+    console.error(`[Backend Extraction] Process error: ${err.message}`);
     logToClient('error', `Process execution failed: ${err.message}`);
-    cleanupAll();
-    res.end();
+    finish();
   });
 
   child.on('close', (code) => {
     if (code === 0 && fs.existsSync(outputPath)) {
+      // Final Output Phase logging
+      const fileRes = getFileResolution(outputPath);
+      console.log(`[Final Output] Trace:`);
+      console.log(`  - Downloaded source file resolution: ${fileRes}`);
+      console.log(`  - FFmpeg command executed: yt-dlp internal post-processor with arguments "${postprocessorArgs || 'none'}"`);
+      console.log(`  - Final output resolution: ${fileRes}`);
+
+      logToClient('log', `✅ Final file resolution: ${fileRes}`);
       logToClient('log', '✅ Stream cutting & output merging completed successfully!');
       logToClient('complete', { fileId, filename: outputFilename });
     } else {
+      console.error(`[Backend Extraction] Terminated with code ${code}. Output file exists: ${fs.existsSync(outputPath)}`);
       logToClient('error', `yt-dlp process terminated with exit code: ${code}. Check logs above for details.`);
     }
-    cleanupAll();
-    res.end();
+    finish();
   });
 
-  // If the user aborts/closes the page, terminate the spawned yt-dlp process
   req.on('close', () => {
-    if (child && !child.killed) {
-      console.log(`[Abort] SSE client disconnected. Terminating child process PID: ${child.pid}`);
-      child.kill('SIGKILL');
-    }
-    cleanupAll();
+    console.log(`[Abort] SSE client closed connection for Job: ${fileId}`);
+    finish();
   });
 });
 
@@ -557,6 +635,96 @@ app.delete('/api/settings/cookies', (req, res) => {
     console.error('[Settings] Failed to delete global cookies file:', err);
     res.status(500).json({ error: `Failed to purge cookies file on server: ${err.message}` });
   }
+});
+
+// GET /api/debug/cookies: Quick check for cookie files on backend
+app.get('/api/debug/cookies', (req, res) => {
+  const exists = fs.existsSync(globalCookiePath);
+  if (!exists) {
+    return res.json({ exists: false, size: 0, lastModified: null });
+  }
+  try {
+    const stats = fs.statSync(globalCookiePath);
+    return res.json({
+      exists: true,
+      size: stats.size,
+      lastModified: stats.mtime
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/debug/formats: Get formats with detailed configurations
+app.get('/api/debug/formats', async (req, res) => {
+  const { url } = req.query;
+  if (!url) {
+    return res.status(400).json({ error: 'Missing url parameter.' });
+  }
+
+  const config = getCommonArgsConfig('4K');
+  const args = [
+    ...config.args,
+    '--dump-single-json',
+    '--skip-download',
+    '--no-warnings',
+    '--no-playlist',
+    url
+  ];
+
+  console.log(`[Debug Formats] Executing: "${ytdlpCmd}" ${args.map(a => a.includes('cookies') ? '--cookies [path]' : a).join(' ')}`);
+
+  const child = spawn(ytdlpCmd, args, { env: ytdlpEnv() });
+  let stdoutData = '';
+  let stderrData = '';
+
+  child.stdout.on('data', (data) => {
+    stdoutData += data.toString();
+  });
+
+  child.stderr.on('data', (data) => {
+    stderrData += data.toString();
+  });
+
+  child.on('close', (code) => {
+    if (code !== 0) {
+      return res.status(500).json({
+        cookieExists: config.cookieExists,
+        cookieSize: config.cookieSize,
+        playerClient: config.playerClient,
+        error: `yt-dlp failed with exit code ${code}`,
+        stderr: stderrData.trim()
+      });
+    }
+
+    try {
+      const parsed = JSON.parse(stdoutData);
+      const formats = parsed.formats || [];
+      const topFormats = formats.slice(-5).map(f => ({
+        format_id: f.format_id,
+        height: f.height || null,
+        ext: f.ext,
+        vcodec: f.vcodec || 'none',
+        acodec: f.acodec || 'none'
+      }));
+
+      res.json({
+        cookieExists: config.cookieExists,
+        cookieSize: config.cookieSize,
+        playerClient: config.playerClient,
+        formatsFound: formats.length,
+        topFormats
+      });
+    } catch (parseErr) {
+      res.status(500).json({
+        cookieExists: config.cookieExists,
+        cookieSize: config.cookieSize,
+        playerClient: config.playerClient,
+        error: 'Failed to parse JSON output',
+        details: parseErr.message
+      });
+    }
+  });
 });
 
 // Download Endpoint - Downloads clip then immediately cleans it up

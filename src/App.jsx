@@ -203,9 +203,11 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState('');
   const [selectedFormat, setSelectedFormat] = useState('mp4');
   const [selectedQuality, setSelectedQuality] = useState('1080p');
+  const [selectedFormatId, setSelectedFormatId] = useState('none');
   const [availableVideoFormats, setAvailableVideoFormats] = useState(['mp4', 'mkv']);
   const [availableAudioFormats, setAvailableAudioFormats] = useState(['mp3', 'm4a']);
   const [availableResolutions, setAvailableResolutions] = useState(['2160p', '1440p', '1080p', '720p', '480p', '360p']);
+  const [rawFormats, setRawFormats] = useState([]);
   const [isLoadingFormats, setIsLoadingFormats] = useState(false);
   const [cookies, setCookies] = useState(() => localStorage.getItem('croptube_cookies') || '');
   const [showCookies, setShowCookies] = useState(false);
@@ -398,16 +400,28 @@ export default function App() {
       setAvailableResolutions(['2160p', '1440p', '1080p', '720p', '480p', '360p']);
       setSelectedFormat('mp4');
       setSelectedQuality('1080p');
+      setRawFormats([]);
       return;
     }
 
     setIsLoadingFormats(true);
+    setErrorMsg('');
     fetch(`/api/formats?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`)
-      .then(r => {
-        if (!r.ok) throw new Error('Failed to fetch format metadata');
-        return r.json();
+      .then(async r => {
+        const isJson = r.headers.get('content-type')?.includes('application/json');
+        const data = isJson ? await r.json() : null;
+        if (!r.ok) {
+          throw new Error(data?.error || `Failed to fetch format metadata (${r.status})`);
+        }
+        return data;
       })
       .then(data => {
+        if (data.rawFormats) {
+          setRawFormats(data.rawFormats);
+        } else {
+          setRawFormats([]);
+        }
+
         if (data.videoFormats && data.videoFormats.length > 0) {
           setAvailableVideoFormats(data.videoFormats);
         }
@@ -424,17 +438,44 @@ export default function App() {
         const defaultQual = data.heights && data.heights.includes('1080p') ? '1080p' : (data.heights?.[0] || '1080p');
         setSelectedQuality(defaultQual);
       })
-      .catch(() => {
-        setAvailableVideoFormats(['mp4', 'mkv']);
-        setAvailableAudioFormats(['mp3', 'm4a']);
-        setAvailableResolutions(['2160p', '1440p', '1080p', '720p', '480p', '360p']);
-        setSelectedFormat('mp4');
-        setSelectedQuality('1080p');
+      .catch((err) => {
+        setErrorMsg(err.message || 'Failed to fetch format metadata.');
+        setAvailableVideoFormats([]);
+        setAvailableAudioFormats([]);
+        setAvailableResolutions([]);
+        setRawFormats([]);
       })
       .finally(() => {
         setIsLoadingFormats(false);
       });
-  }, [videoId]);
+  }, [videoId, hasGlobalCookies]);
+
+  // ── Resolve exact yt-dlp format_id reactively ──────────────────────────────
+  useEffect(() => {
+    if (!rawFormats || rawFormats.length === 0) {
+      setSelectedFormatId('none');
+      return;
+    }
+
+    const isAudio = selectedFormat === 'mp3' || selectedFormat === 'm4a' || selectedFormat === 'opus' || selectedFormat === 'webm-audio';
+
+    if (isAudio) {
+      const audioExt = selectedFormat === 'webm-audio' ? 'webm' : (selectedFormat === 'mp3' ? 'mp3' : selectedFormat);
+      const match = rawFormats.find(f => f.acodec !== 'none' && f.vcodec === 'none' && f.ext === audioExt) ||
+                    rawFormats.find(f => f.acodec !== 'none' && f.vcodec === 'none');
+      setSelectedFormatId(match ? match.format_id : 'bestaudio');
+    } else {
+      const targetHeight = parseInt(selectedQuality) || 1080;
+      const matchingHeight = rawFormats.filter(f => f.height === targetHeight && f.vcodec !== 'none');
+      
+      const containerMatch = matchingHeight.find(f => f.ext === selectedFormat) || 
+                            matchingHeight[0] ||
+                            rawFormats.find(f => f.height === targetHeight) ||
+                            rawFormats.find(f => f.vcodec !== 'none');
+                            
+      setSelectedFormatId(containerMatch ? containerMatch.format_id : 'none');
+    }
+  }, [selectedFormat, selectedQuality, rawFormats]);
 
   // ── Grab time from player ────────────────────────────────────────────────
   const grabTime = useCallback((setter) => {
@@ -504,10 +545,25 @@ export default function App() {
     ]);
 
     // Step 1: Initiate job
+    const payload = {
+      url: youtubeUrl,
+      start: startTime,
+      end: endTime,
+      format: selectedFormat,
+      quality: selectedQuality,
+      format_id: selectedFormatId,
+      cookies: cookies
+    };
+
+    console.log(`[Quality Selection] Trace:`);
+    console.log(`  - Selected dropdown quality label: ${selectedQuality}`);
+    console.log(`  - Resolved format_id: ${selectedFormatId}`);
+    console.log(`  - Request payload sent from frontend:`, payload);
+
     fetch('/api/extract/initiate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: youtubeUrl, start: startTime, end: endTime, format: selectedFormat, quality: selectedQuality })
+      body: JSON.stringify(payload)
     })
       .then(async r => {
         const text = await r.text();
@@ -559,15 +615,25 @@ export default function App() {
                 url: youtubeUrl, videoId, start: startTime, end: endTime,
                 duration: secsToHMS(e - s), timestamp: new Date().toLocaleTimeString()
               }, ...p]);
+              
+              const dlExt = selectedFormat === 'webm-audio' ? 'webm' : (selectedFormat === 'mp3' ? 'mp3' : selectedFormat);
               const link = document.createElement('a');
               link.href = `/api/download/${fid}`;
-              link.download = '';
+              link.download = `CropTube_Clip_${fid}.${dlExt}`;
               document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
+              
+              // Short delay to let browser process click before cleanup
+              setTimeout(() => {
+                link.click();
+                document.body.removeChild(link);
+              }, 100);
 
-              setTimeout(() => { setExtracting(false); setCurrentStep(0); }, 3000);
-              es.close();
+              // Delay SSE close and state reset by 1000ms so the download request hits the server first
+              setTimeout(() => {
+                setExtracting(false);
+                setCurrentStep(0);
+                es.close();
+              }, 1000);
             }
           } catch (_) { }
         };
