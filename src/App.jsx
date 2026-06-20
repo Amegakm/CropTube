@@ -408,11 +408,11 @@ export default function App() {
       setSelectedFormatId(match ? match.format_id : 'bestaudio');
     } else {
       const targetHeight = parseInt(selectedQuality) || 1080;
-      const matchingHeight = rawFormats.filter(f => f.height === targetHeight && f.vcodec !== 'none');
+      const matchingHeight = rawFormats.filter(f => (f.label === selectedQuality || f.height === targetHeight) && f.vcodec !== 'none');
       
       const containerMatch = matchingHeight.find(f => f.ext === selectedFormat) || 
                             matchingHeight[0] ||
-                            rawFormats.find(f => f.height === targetHeight) ||
+                            rawFormats.find(f => f.label === selectedQuality || f.height === targetHeight) ||
                             rawFormats.find(f => f.vcodec !== 'none');
                             
       setSelectedFormatId(containerMatch ? containerMatch.format_id : 'none');

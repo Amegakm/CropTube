@@ -298,12 +298,42 @@ app.get('/api/formats', async (req, res) => {
       const parsed = JSON.parse(stdoutData);
       const formats = parsed.formats || [];
       
-      const STANDARD_HEIGHTS = [144, 240, 360, 480, 720, 1080, 1440, 2160];
-      const videoFormats = formats.filter(f => f.vcodec !== 'none' && f.height && STANDARD_HEIGHTS.includes(f.height));
+      // 1. Log the first 10 raw formats returned by yt-dlp per Requirement 1
+      console.log("[Formats Debug] First 10 raw formats returned by yt-dlp:");
+      formats.slice(0, 10).forEach((f, idx) => {
+        console.log(`  [Raw Format #${idx + 1}] format_id: ${f.format_id}, ext: ${f.ext}, width: ${f.width || 'N/A'}, height: ${f.height || 'N/A'}, resolution: ${f.resolution || 'N/A'}, vcodec: ${f.vcodec || 'none'}, acodec: ${f.acodec || 'none'}`);
+      });
+
+      // Helper function to map a height to nearest standard YouTube quality label
+      const getLabelForHeight = (height) => {
+        if (!height) return null;
+        const STANDARD_HEIGHTS = [144, 240, 360, 480, 720, 1080, 1440, 2160];
+        let nearest = STANDARD_HEIGHTS[0];
+        let minDiff = Math.abs(height - nearest);
+        for (let i = 1; i < STANDARD_HEIGHTS.length; i++) {
+          const diff = Math.abs(height - STANDARD_HEIGHTS[i]);
+          if (diff < minDiff) {
+            minDiff = diff;
+            nearest = STANDARD_HEIGHTS[i];
+          }
+        }
+        return `${nearest}p`;
+      };
+
+      // Accept formats based on actual height (Requirement 4) and do not discard due to slight differences (Requirement 6)
+      const videoFormats = formats.filter(f => f.vcodec !== 'none' && f.height);
       const audioFormats = formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none');
 
-      const heights = Array.from(new Set(videoFormats.map(f => f.height)))
-        .sort((a, b) => b - a);
+      // Map display labels and collect unique ones
+      const heightsSet = new Set();
+      videoFormats.forEach(f => {
+        f.label = getLabelForHeight(f.height);
+        if (f.label) heightsSet.add(f.label);
+      });
+
+      // Sort the standard display heights in descending order
+      const heightsOrder = ['2160p', '1440p', '1080p', '720p', '480p', '360p', '240p', '144p'];
+      const availableHeights = heightsOrder.filter(h => heightsSet.has(h));
 
       const videoExts = Array.from(new Set(videoFormats.map(f => f.ext))).filter(e => e === 'mp4' || e === 'mkv' || e === 'webm');
       const audioExts = Array.from(new Set(audioFormats.map(f => f.ext))).filter(e => e === 'mp3' || e === 'm4a' || e === 'opus');
@@ -311,27 +341,31 @@ app.get('/api/formats', async (req, res) => {
       console.log(`[Format Retrieval] Success:`);
       console.log(`  - Number of formats returned: ${formats.length}`);
       console.log(`  - Filtered video formats with standard heights: ${videoFormats.length}`);
-      console.log(`  - Available heights: ${heights.join(', ')}`);
+      console.log(`  - Available heights: ${availableHeights.join(', ')}`);
 
-      // Log format details per requirements
+      // Log Raw height, Display label, format_id (Requirement 7)
       videoFormats.forEach(f => {
-        console.log(`[Format Label Log] format_id: ${f.format_id}, width: ${f.width || 'N/A'}, height: ${f.height}, label: ${f.height}p`);
+        console.log(`height=${f.height} label=${f.label} format_id=${f.format_id}`);
       });
 
-      const rawFormats = formats.map(f => ({
-        format_id: f.format_id,
-        height: f.height || null,
-        width: f.width || null,
-        ext: f.ext,
-        vcodec: f.vcodec || 'none',
-        acodec: f.acodec || 'none',
-        tbr: f.tbr || null
-      }));
+      const rawFormats = formats.map(f => {
+        const label = f.vcodec !== 'none' && f.height ? getLabelForHeight(f.height) : null;
+        return {
+          format_id: f.format_id,
+          height: f.height || null,
+          width: f.width || null,
+          label: label,
+          ext: f.ext,
+          vcodec: f.vcodec || 'none',
+          acodec: f.acodec || 'none',
+          tbr: f.tbr || null
+        };
+      });
 
       res.json({
         title: parsed.title,
         duration: parsed.duration,
-        heights: heights.map(h => `${h}p`),
+        heights: availableHeights,
         videoFormats: videoExts.length > 0 ? videoExts : ['mp4', 'mkv'],
         audioFormats: audioExts.length > 0 ? audioExts : ['mp3', 'm4a'],
         rawFormats
