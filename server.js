@@ -110,7 +110,14 @@ for (const dir of [binDir, tempDir, cacheDir]) {
  * Priority: system PATH (pip3-installed) > local bin folder.
  */
 function resolveYtdlpPath() {
-  // 1. Prefer the pip3-installed system yt-dlp (guaranteed on our Docker image)
+  // 1. Prefer local bin folder if it exists (standalone binary for dev/Windows)
+  const localBin = path.join(binDir, isWindows ? 'yt-dlp.exe' : 'yt-dlp');
+  if (fs.existsSync(localBin)) {
+    console.log(`[Auto-Setup] Local yt-dlp found: ${localBin}`);
+    return localBin;
+  }
+
+  // 2. Prefer the pip3-installed system yt-dlp (guaranteed on our Docker image)
   try {
     const out = execSync(isWindows ? 'where yt-dlp' : 'which yt-dlp')
       .toString().trim().split('\n')[0].trim();
@@ -121,7 +128,7 @@ function resolveYtdlpPath() {
   } catch (_) { /* not found */ }
 
   throw new Error(
-    'yt-dlp not found in PATH. On Docker/Render, ensure the Dockerfile installs it via pip3.'
+    'yt-dlp not found in PATH or local bin. On Docker/Render, ensure the Dockerfile installs it via pip3.'
   );
 }
 
@@ -291,7 +298,8 @@ app.get('/api/formats', async (req, res) => {
       const parsed = JSON.parse(stdoutData);
       const formats = parsed.formats || [];
       
-      const videoFormats = formats.filter(f => f.vcodec !== 'none' && f.height);
+      const STANDARD_HEIGHTS = [144, 240, 360, 480, 720, 1080, 1440, 2160];
+      const videoFormats = formats.filter(f => f.vcodec !== 'none' && f.height && STANDARD_HEIGHTS.includes(f.height));
       const audioFormats = formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none');
 
       const heights = Array.from(new Set(videoFormats.map(f => f.height)))
@@ -302,11 +310,18 @@ app.get('/api/formats', async (req, res) => {
 
       console.log(`[Format Retrieval] Success:`);
       console.log(`  - Number of formats returned: ${formats.length}`);
+      console.log(`  - Filtered video formats with standard heights: ${videoFormats.length}`);
       console.log(`  - Available heights: ${heights.join(', ')}`);
+
+      // Log format details per requirements
+      videoFormats.forEach(f => {
+        console.log(`[Format Label Log] format_id: ${f.format_id}, width: ${f.width || 'N/A'}, height: ${f.height}, label: ${f.height}p`);
+      });
 
       const rawFormats = formats.map(f => ({
         format_id: f.format_id,
         height: f.height || null,
+        width: f.width || null,
         ext: f.ext,
         vcodec: f.vcodec || 'none',
         acodec: f.acodec || 'none',
