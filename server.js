@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import https from 'https';
 import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import ffmpegStatic from 'ffmpeg-static';
@@ -256,11 +257,7 @@ app.get('/api/formats', async (req, res) => {
 
   args.push(url);
 
-  console.log(`[Format Retrieval] Trace:`);
-  console.log(`  - Cookie file exists: ${config.cookieExists}`);
-  console.log(`  - Cookie file size: ${config.cookieSize} bytes`);
-  console.log(`  - Active player_client: ${config.playerClient}`);
-  console.log(`  - Exact yt-dlp command: "${ytdlpCmd}" ${args.map(a => a.includes('cookies') ? '--cookies [path]' : a).join(' ')}`);
+  console.log(`[Formats] Cookie file exists: ${config.cookieExists}, size: ${config.cookieSize} bytes`);
 
   const child = spawn(ytdlpCmd, args, { env: ytdlpEnv() });
   let stdoutData = '';
@@ -287,7 +284,7 @@ app.get('/api/formats', async (req, res) => {
             : "YouTube bot detection triggered. Please register YouTube authentication cookies in Settings to bypass this on cloud/datacenter IPs.")
         : "Failed to retrieve video formats.";
 
-      return res.status(isBot ? 403 : 500).json({ error: errorMsg, details: stderrData.trim() });
+      return res.status(isBot ? 403 : 500).json({ error: errorMsg });
     }
 
     try {
@@ -343,10 +340,7 @@ app.post('/api/extract/initiate', (req, res) => {
       return res.status(400).json({ error: 'Missing required parameters: url, start, end timestamps.' });
     }
 
-    console.log(`[Quality Selection] Trace:`);
-    console.log(`  - Request payload received:`, req.body);
-    console.log(`  - Selected dropdown quality label: ${quality}`);
-    console.log(`  - Selected format_id: ${format_id || 'none'}`);
+    console.log(`[Initiate] Job request: quality=${quality}, format_id=${format_id || 'none'}`);
 
     const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     const cookiePath = path.join(tempDir, `cookies_${fileId}.txt`);
@@ -389,7 +383,7 @@ app.post('/api/extract/initiate', (req, res) => {
     return res.json({ fileId });
   } catch (err) {
     console.error('[Initiate] Unexpected error:', err);
-    return res.status(500).json({ error: `Internal server error: ${err.message}` });
+    return res.status(500).json({ error: 'Clip extraction failed. Please try again.' });
   }
 });
 
@@ -414,7 +408,7 @@ app.get('/api/extract/stream', async (req, res) => {
   const logToClient = (type, message) => {
     res.write(`data: ${JSON.stringify({ type, message })}\n\n`);
   };
-  logToClient('log', '⚡ Establishing SSE tunnel with CropTube extraction backend...');
+  // SSE connection established
 
   if (!fileId || !activeJobs.has(fileId)) {
     logToClient('error', 'Job expired or invalid session ID. Please re-initiate extraction.');
@@ -435,7 +429,8 @@ app.get('/api/extract/stream', async (req, res) => {
   try {
     ytdlpCmd = await resolveYtdlpPath();
   } catch (err) {
-    logToClient('error', `Dependency Resolution Error: ${err.message}`);
+    console.error(`[Extract] Dependency resolution failed: ${err.message}`);
+    logToClient('error', 'Service temporarily unavailable. Please try again later.');
     return res.end();
   }
 
@@ -444,14 +439,12 @@ app.get('/api/extract/stream', async (req, res) => {
   let outputFilename = `croptube_${fileId}.${targetFormat === 'webm-audio' ? 'webm' : targetFormat}`;
   const outputPath = path.join(tempDir, outputFilename);
 
-  console.log(`[Backend Extraction] Trace:`);
-  console.log(`  - format_id received: ${format_id || 'none'}`);
-  console.log(`  - quality received: ${quality}`);
+  console.log(`[Extract] Starting: quality=${quality}, format_id=${format_id || 'none'}`);
 
-  // We require format_id! If it's missing, refuse extraction.
+  // format_id is required — refuse extraction if missing
   if (!format_id || format_id === 'none') {
-    console.error(`[Backend Extraction] Error: Missing format_id. Slicing aborted.`);
-    logToClient('error', 'Authentication/Extraction Error: Missing specific format selection. Please try reloading formats.');
+    console.error(`[Extract] Missing format_id — aborting.`);
+    logToClient('error', 'Unable to fetch video information. Please reload and try again.');
     clearInterval(keepaliveInterval);
     return res.end();
   }
@@ -466,7 +459,7 @@ app.get('/api/extract/stream', async (req, res) => {
     formatSelector = `${format_id}+ba${noHLS}/bestaudio`;
   }
 
-  console.log(`  - Final yt-dlp format string: "${formatSelector}"`);
+  console.log(`[Extract] Format selector: "${formatSelector}"`);
 
   // FFmpeg stream-copy argument
   const postprocessorArgs = isAudio
@@ -496,9 +489,7 @@ app.get('/api/extract/stream', async (req, res) => {
     args.push('--postprocessor-args', postprocessorArgs);
   }
 
-  if (config.cookieExists && config.cookieSize > 0) {
-    logToClient('log', '🍪 Server-side cookies loaded (cloud auth active)...');
-  }
+  // Cloud auth cookies present (server-side only, not exposed to client)
 
   args.push('--ffmpeg-location', resolvedFFmpegPath);
   args.push('-f', formatSelector);
@@ -513,19 +504,28 @@ app.get('/api/extract/stream', async (req, res) => {
     '-o', outputPath
   );
 
-  console.log(`  - Exact yt-dlp command executed: "${ytdlpCmd}" ${args.map(a => a.includes('cookies') ? '--cookies [path]' : a).join(' ')}`);
-
-  logToClient('log', `🎬 Initiating surgical stream-seek for duration [${start} to ${end}]`);
-  logToClient('log', `🚀 Executing: yt-dlp --download-sections "*${start}-${end}" -f "${formatSelector}" [URL]`);
+  logToClient('status', 'Preparing clip...');
 
   const child = spawn(ytdlpCmd, args, { env: ytdlpEnv() });
+  let stderrBuffer = '';
 
   child.stdout.on('data', (data) => {
     const lines = data.toString().split('\n');
     lines.forEach(line => {
       const trimmed = line.trim();
-      if (trimmed) {
-        logToClient('log', trimmed);
+      if (!trimmed) return;
+      // Server-side diagnostic logging — never forward raw output to client
+      console.log(`[yt-dlp] ${trimmed}`);
+      // Map to user-friendly client status updates
+      if (/\[download\]/.test(trimmed)) {
+        const pctMatch = trimmed.match(/(\d+(?:\.\d+)?)%/);
+        if (pctMatch) {
+          logToClient('progress', { stage: 'Downloading stream...', pct: parseFloat(pctMatch[1]) });
+        } else {
+          logToClient('status', 'Downloading stream...');
+        }
+      } else if (/\[Merger\]|\[ffmpeg\]|\[ExtractAudio\]/i.test(trimmed)) {
+        logToClient('status', 'Finalizing clip...');
       }
     });
   });
@@ -535,7 +535,9 @@ app.get('/api/extract/stream', async (req, res) => {
     lines.forEach(line => {
       const trimmed = line.trim();
       if (trimmed) {
-        logToClient('log', `[Warning/Stderr] ${trimmed}`);
+        stderrBuffer += trimmed + '\n';
+        // Server-side only — never expose stderr output to client
+        console.error(`[yt-dlp stderr] ${trimmed}`);
       }
     });
   });
@@ -570,26 +572,27 @@ app.get('/api/extract/stream', async (req, res) => {
   };
 
   child.on('error', (err) => {
-    console.error(`[Backend Extraction] Process error: ${err.message}`);
-    logToClient('error', `Process execution failed: ${err.message}`);
+    console.error(`[Extract] Process error: ${err.message}`);
+    logToClient('error', 'Clip extraction failed. Please try again.');
     finish();
   });
 
   child.on('close', (code) => {
     if (code === 0 && fs.existsSync(outputPath)) {
-      // Final Output Phase logging
       const fileRes = getFileResolution(outputPath);
-      console.log(`[Final Output] Trace:`);
-      console.log(`  - Downloaded source file resolution: ${fileRes}`);
-      console.log(`  - FFmpeg command executed: yt-dlp internal post-processor with arguments "${postprocessorArgs || 'none'}"`);
-      console.log(`  - Final output resolution: ${fileRes}`);
-
-      logToClient('log', `✅ Final file resolution: ${fileRes}`);
-      logToClient('log', '✅ Stream cutting & output merging completed successfully!');
+      // Server-side diagnostic logging only
+      console.log(`[Final Output] resolution=${fileRes}, postprocessor=${postprocessorArgs || 'none'}`);
       logToClient('complete', { fileId, filename: outputFilename });
     } else {
-      console.error(`[Backend Extraction] Terminated with code ${code}. Output file exists: ${fs.existsSync(outputPath)}`);
-      logToClient('error', `yt-dlp process terminated with exit code: ${code}. Check logs above for details.`);
+      console.error(`[Extract] Process terminated (code ${code}). Output exists: ${fs.existsSync(outputPath)}`);
+      const isCookieError = stderrBuffer.includes("Sign in to confirm you're not a bot") ||
+                            stderrBuffer.includes('Sign in to confirm your age') ||
+                            stderrBuffer.includes('cookies have');
+      if (isCookieError) {
+        logToClient('cookie_error', 'Authentication cookies may be expired. Please update your session cookies in Settings.');
+      } else {
+        logToClient('error', 'Clip extraction failed. Please try again.');
+      }
     }
     finish();
   });
@@ -637,95 +640,75 @@ app.delete('/api/settings/cookies', (req, res) => {
   }
 });
 
-// GET /api/debug/cookies: Quick check for cookie files on backend
-app.get('/api/debug/cookies', (req, res) => {
-  const exists = fs.existsSync(globalCookiePath);
-  if (!exists) {
-    return res.json({ exists: false, size: 0, lastModified: null });
+// POST /api/report: Submit an error report to Telegram
+app.post('/api/report', (req, res) => {
+  const { timestamp, quality, format, browser, platform, stage, errorMessage } = req.body;
+
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (!botToken || !chatId) {
+    console.error('[Report] Telegram credentials not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID).');
+    return res.status(503).json({ success: false });
   }
-  try {
-    const stats = fs.statSync(globalCookiePath);
-    return res.json({
-      exists: true,
-      size: stats.size,
-      lastModified: stats.mtime
+
+  // Sanitize error message — strip file paths, long tokens, cookie fragments
+  const sanitized = (errorMessage || 'Unknown error')
+    .replace(/\/[\w/.\-]+/g, '[path]')
+    .replace(/[A-Za-z0-9+/=]{40,}/g, '[redacted]')
+    .substring(0, 500);
+
+  const text = [
+    '🚨 <b>CropTube Error Report</b>',
+    '',
+    `<b>Time:</b> ${timestamp || 'N/A'}`,
+    `<b>Quality:</b> ${quality || 'N/A'}`,
+    `<b>Format:</b> ${format || 'N/A'}`,
+    `<b>Browser:</b> ${(browser || 'N/A').substring(0, 120)}`,
+    `<b>Platform:</b> ${platform || 'N/A'}`,
+    `<b>Stage:</b> ${stage || 'N/A'}`,
+    '',
+    '<b>Error:</b>',
+    sanitized
+  ].join('\n');
+
+  const payload = JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' });
+
+  const options = {
+    hostname: 'api.telegram.org',
+    path: `/bot${botToken}/sendMessage`,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload)
+    }
+  };
+
+  const tgReq = https.request(options, (tgRes) => {
+    let data = '';
+    tgRes.on('data', chunk => { data += chunk; });
+    tgRes.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.ok) {
+          res.json({ success: true });
+        } else {
+          console.error('[Report] Telegram API error:', parsed.description);
+          res.status(500).json({ success: false });
+        }
+      } catch (_) {
+        res.status(500).json({ success: false });
+      }
     });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/debug/formats: Get formats with detailed configurations
-app.get('/api/debug/formats', async (req, res) => {
-  const { url } = req.query;
-  if (!url) {
-    return res.status(400).json({ error: 'Missing url parameter.' });
-  }
-
-  const config = getCommonArgsConfig('4K');
-  const args = [
-    ...config.args,
-    '-v',
-    '--dump-single-json',
-    '--skip-download',
-    '--no-warnings',
-    '--no-playlist',
-    url
-  ];
-
-  console.log(`[Debug Formats] Executing: "${ytdlpCmd}" ${args.map(a => a.includes('cookies') ? '--cookies [path]' : a).join(' ')}`);
-
-  const child = spawn(ytdlpCmd, args, { env: ytdlpEnv() });
-  let stdoutData = '';
-  let stderrData = '';
-
-  child.stdout.on('data', (data) => {
-    stdoutData += data.toString();
   });
 
-  child.stderr.on('data', (data) => {
-    stderrData += data.toString();
+  tgReq.on('error', (err) => {
+    console.error('[Report] Telegram request failed:', err.message);
+    res.status(500).json({ success: false });
   });
 
-  child.on('close', (code) => {
-    if (code !== 0) {
-      return res.status(500).json({
-        cookieExists: config.cookieExists,
-        cookieSize: config.cookieSize,
-        playerClient: config.playerClient,
-        error: `yt-dlp failed with exit code ${code}`,
-        stderr: stderrData.trim()
-      });
-    }
-
-    try {
-      const parsed = JSON.parse(stdoutData);
-      const formats = parsed.formats || [];
-      const topFormats = formats.slice(-5).map(f => ({
-        format_id: f.format_id,
-        height: f.height || null,
-        ext: f.ext,
-        vcodec: f.vcodec || 'none',
-        acodec: f.acodec || 'none'
-      }));
-
-      res.json({
-        cookieExists: config.cookieExists,
-        cookieSize: config.cookieSize,
-        playerClient: config.playerClient,
-        formatsFound: formats.length,
-        topFormats
-      });
-    } catch (parseErr) {
-      res.status(500).json({
-        cookieExists: config.cookieExists,
-        cookieSize: config.cookieSize,
-        playerClient: config.playerClient,
-        error: 'Failed to parse JSON output',
-        details: parseErr.message
-      });
-    }
-  });
+  tgReq.write(payload);
+  tgReq.end();
 });
 
 // Download Endpoint - Downloads clip then immediately cleans it up
@@ -746,7 +729,7 @@ app.get('/api/download/:fileId', (req, res) => {
   const filePath = path.join(tempDir, matchedFile);
   const ext = path.extname(matchedFile);
 
-  console.log(`[Delivery] Serving file to client: ${filePath}`);
+  console.log(`[Delivery] Serving clip (fileId: ${fileId}) to client`);
   
   res.download(filePath, `CropTube_Clip_${fileId}${ext}`, (err) => {
     if (err) {
@@ -780,8 +763,9 @@ if (isProduction) {
 app.listen(PORT, () => {
   console.log(`=================================================`);
   console.log(`  CropTube Backend Server running on port ${PORT}`);
-  console.log(`  yt-dlp: ${ytdlpCmd}`);
-  console.log(`  ffmpeg: ${resolvedFFmpegPath}`);
+  console.log(`  yt-dlp: ${ytdlpCmd ? 'OK' : 'NOT FOUND'}`);
+  console.log(`  ffmpeg: ${resolvedFFmpegPath ? 'OK' : 'NOT FOUND'}`);
   console.log(`  cookies: ${fs.existsSync(globalCookiePath) ? 'loaded ✓' : 'not found'}`);
+  console.log(`  report: ${process.env.TELEGRAM_BOT_TOKEN ? 'configured ✓' : 'not configured'}`);
   console.log(`=================================================`);
 });

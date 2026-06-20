@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Scissors, Play, Download, Video, Clock,
-  Terminal as TerminalIcon, AlertCircle, CheckCircle2,
-  Loader2, Info, Crosshair, SkipBack, SkipForward, Trash2, Search
+  Scissors, Play, Download, AlertCircle, CheckCircle2,
+  Loader2, Crosshair, Trash2, Search
 } from 'lucide-react';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -131,62 +130,6 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
   );
 }
 
-// ─── Log line noise filter ────────────────────────────────────────────────────
-// Hides verbose ffmpeg metadata lines that clutter the terminal output.
-const NOISE_PATTERNS = [
-  /^Input #\d/,
-  /^\s+Metadata:/,
-  /major_brand/,
-  /minor_version/,
-  /compatible_brands/,
-  /creation_time/,
-  /handler_name/,
-  /vendor_id/,
-  /encoder\s*:/i,
-  /^\s+Stream #\d.*Video:/,
-  /^\s+Stream #\d.*Audio:/,
-  /Output #\d/,
-  /^\s+Stream #0:\d.*\(und\)/,
-  /Side data:/,
-  /cpb: bitrate/,
-  /^\s+Duration: \d/,
-  /Press \[q\]/,
-  /using cpu capabilities/,
-  /profile High/,
-  /264 - core \d/,
-  /options: cabac/,
-  /using SAR/,
-  /^Stream mapping:/,
-  /Stream #\d:\d -> #\d:\d/,
-];
-
-function isNoisyLine(text) {
-  return NOISE_PATTERNS.some(p => p.test(text));
-}
-
-function parseProgressFromLog(logText, clipLenSecs) {
-  // Pattern 1: yt-dlp download percentage
-  const downloadMatch = logText.match(/\[download\]\s+(\d+(?:\.\d+)?)%/);
-  if (downloadMatch) {
-    return Math.min(100, parseFloat(downloadMatch[1]));
-  }
-
-  // Pattern 2: ffmpeg progress time
-  const ffmpegTimeMatch = logText.match(/time=(\d{2}):(\d{2}):(\d{2})(?:\.(\d{2}))?/);
-  if (ffmpegTimeMatch && clipLenSecs > 0) {
-    const hours = parseInt(ffmpegTimeMatch[1], 10);
-    const minutes = parseInt(ffmpegTimeMatch[2], 10);
-    const seconds = parseInt(ffmpegTimeMatch[3], 10);
-    const ms = ffmpegTimeMatch[4] ? parseInt(ffmpegTimeMatch[4], 10) / 100 : 0;
-    const totalSecs = hours * 3600 + minutes * 60 + seconds + ms;
-    const pct = (totalSecs / clipLenSecs) * 100;
-    return Math.min(99.9, Math.max(0, parseFloat(pct.toFixed(1))));
-  }
-
-  return null;
-}
-
-
 // ─── Main App ────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -197,7 +140,12 @@ export default function App() {
   const [duration, setDuration] = useState(0);
   const [playerReady, setPlayerReady] = useState(false);
   const [extracting, setExtracting] = useState(false);
-  const [logs, setLogs] = useState([]);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [extractionFailed, setExtractionFailed] = useState(false);
+  const [extractionComplete, setExtractionComplete] = useState(false);
+  const [lastError, setLastError] = useState('');
+  const [showReportPanel, setShowReportPanel] = useState(false);
+  const [reportSent, setReportSent] = useState(null);
   const [clipsHistory, setClipsHistory] = useState([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
@@ -217,11 +165,9 @@ export default function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showDashboard, setShowDashboard] = useState(false);
-  const [showRawLogs, setShowRawLogs] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
 
   const playerRef = useRef(null);
-  const terminalEndRef = useRef(null);
   const ytApiReady = useRef(false);
 
   const handleSearch = () => {
@@ -267,10 +213,6 @@ export default function App() {
       .catch(() => { });
   }, []);
 
-  // Auto-scroll terminal (using 'auto' to prevent animation layout locking)
-  useEffect(() => {
-    terminalEndRef.current?.scrollIntoView({ behavior: 'auto' });
-  }, [logs]);
 
   // ── Parse YouTube video ID from URL ──────────────────────────────────────
   useEffect(() => {
@@ -524,7 +466,29 @@ export default function App() {
       .catch(() => { });
   };
 
-  // ── Extract clip ─────────────────────────────────────────────────────────
+  // ── Report Issue ────────────────────────────────────────────────────────────────────────────────
+  const handleReport = () => {
+    const reportData = {
+      timestamp: new Date().toISOString(),
+      quality: selectedQuality,
+      format: selectedFormat,
+      browser: navigator.userAgent.substring(0, 150),
+      platform: navigator.platform,
+      stage: currentStep === 1 ? 'Preparing' : currentStep === 2 ? 'Extracting' : 'Unknown',
+      errorMessage: lastError
+    };
+
+    fetch('/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reportData)
+    })
+      .then(r => r.json())
+      .then(data => setReportSent(data.success ? 'success' : 'error'))
+      .catch(() => setReportSent('error'));
+  };
+
+  // ── Extract clip ────────────────────────────────────────────────────────────────────────────────
   const handleExtract = () => {
     if (!videoId) return;
     const s = hmsToSecs(startTime), e = hmsToSecs(endTime);
@@ -538,11 +502,12 @@ export default function App() {
     setExtracting(true);
     setCurrentStep(1);
     setProgress(0);
-    setLogs([
-      { text: '[CropTube Initialize] Launching clip slicing agent...', type: 'system' },
-      { text: `[Parameters] Target video URL: ${youtubeUrl}`, type: 'info' },
-      { text: `[Parameters] Segment range: ${startTime} ➔ ${endTime} (${secsToHMS(e - s)})`, type: 'info' },
-    ]);
+    setStatusMessage('Preparing clip...');
+    setExtractionFailed(false);
+    setExtractionComplete(false);
+    setShowReportPanel(false);
+    setReportSent(null);
+    setLastError('');
 
     // Step 1: Initiate job
     const payload = {
@@ -555,10 +520,6 @@ export default function App() {
       cookies: cookies
     };
 
-    console.log(`[Quality Selection] Trace:`);
-    console.log(`  - Selected dropdown quality label: ${selectedQuality}`);
-    console.log(`  - Resolved format_id: ${selectedFormatId}`);
-    console.log(`  - Request payload sent from frontend:`, payload);
 
     fetch('/api/extract/initiate', {
       method: 'POST',
@@ -578,57 +539,56 @@ export default function App() {
 
         es.onmessage = (evt) => {
           try {
-            const payload = JSON.parse(evt.data);
+            const data = JSON.parse(evt.data);
 
-            if (payload.type === 'log') {
-              const msg = payload.message;
-              // Detect expired cookies
-              if (msg.includes('no longer valid') || msg.includes('cookies have')) {
-                setCookiesExpired(true);
-                setShowCookies(true);
-                setHasGlobalCookies(false);
-              }
-              // Filter ffmpeg metadata noise
-              if (isNoisyLine(msg)) return;
-              setLogs(p => [...p, { text: msg, type: 'info' }]);
-
-              // Parse progress
-              const parsedPct = parseProgressFromLog(msg, clipLen);
-              if (parsedPct !== null) {
-                setProgress(parsedPct);
-              }
-
-            } else if (payload.type === 'error') {
-              setLogs(p => [...p, { text: `❌ ${payload.message}`, type: 'error' }]);
-              setExtracting(false); setCurrentStep(0); setShowRawLogs(true); es.close();
-
-            } else if (payload.type === 'complete') {
-              const { fileId: fid, filename } = payload.message;
+            if (data.type === 'status') {
+              setStatusMessage(data.message);
+            } else if (data.type === 'progress') {
+              const { stage, pct } = data.message;
+              setStatusMessage(stage);
+              setProgress(pct);
+            } else if (data.type === 'cookie_error') {
+              setCookiesExpired(true);
+              setShowCookies(true);
+              setHasGlobalCookies(false);
+              setExtractionFailed(true);
+              setLastError(data.message);
+              setStatusMessage('');
+              setExtracting(false);
+              setCurrentStep(0);
+              es.close();
+            } else if (data.type === 'error') {
+              setExtractionFailed(true);
+              setLastError(data.message);
+              setStatusMessage('');
+              setExtracting(false);
+              setCurrentStep(0);
+              es.close();
+            } else if (data.type === 'complete') {
+              const { fileId: fid, filename } = data.message;
               setCurrentStep(3);
               setProgress(100);
-              setLogs(p => [
-                ...p,
-                { text: '✅ Clip ready! Triggering download...', type: 'success' },
-              ]);
+              setStatusMessage('Download ready.');
+              setExtractionComplete(true);
               setClipsHistory(p => [{
                 id: fid, title: `Clip (${startTime} – ${endTime})`,
                 url: youtubeUrl, videoId, start: startTime, end: endTime,
                 duration: secsToHMS(e - s), timestamp: new Date().toLocaleTimeString()
               }, ...p]);
-              
+
               const dlExt = selectedFormat === 'webm-audio' ? 'webm' : (selectedFormat === 'mp3' ? 'mp3' : selectedFormat);
               const link = document.createElement('a');
               link.href = `/api/download/${fid}`;
               link.download = `CropTube_Clip_${fid}.${dlExt}`;
               document.body.appendChild(link);
-              
+
               // Short delay to let browser process click before cleanup
               setTimeout(() => {
                 link.click();
                 document.body.removeChild(link);
               }, 100);
 
-              // Delay SSE close and state reset by 1000ms so the download request hits the server first
+              // Delay SSE close and state reset so the download request reaches the server first
               setTimeout(() => {
                 setExtracting(false);
                 setCurrentStep(0);
@@ -639,16 +599,20 @@ export default function App() {
         };
 
         es.onerror = () => {
-          setLogs(p => [...p, {
-            text: '⚠️ SSE tunnel dropped — extraction may still be running on the server.',
-            type: 'error'
-          }]);
-          setExtracting(false); setCurrentStep(0); setShowRawLogs(true); es.close();
+          setExtractionFailed(true);
+          setLastError('Connection lost. The clip may still be processing on the server.');
+          setStatusMessage('');
+          setExtracting(false);
+          setCurrentStep(0);
+          es.close();
         };
       })
       .catch(err => {
-        setLogs(p => [...p, { text: `❌ ${err.message}`, type: 'error' }]);
-        setExtracting(false); setCurrentStep(0); setShowRawLogs(true);
+        setExtractionFailed(true);
+        setLastError(err.message || 'Unable to initiate clip extraction. Please try again.');
+        setStatusMessage('');
+        setExtracting(false);
+        setCurrentStep(0);
       });
   };
 
@@ -1119,31 +1083,40 @@ export default function App() {
 
               {/* Action Trigger / Progress Button */}
               <div className="pt-2 border-t border-slate-900/40">
-                {(extracting || logs.length > 0) ? (
+              {(extracting || extractionFailed || extractionComplete) ? (
                   <div className="w-full bg-slate-900/50 border border-slate-800 rounded-xl p-3.5 space-y-2.5 shadow-inner">
+                    {/* Status header */}
                     <div className="flex justify-between items-center text-xs">
                       <div className="flex items-center gap-2 font-semibold">
                         {extracting ? (
                           <>
                             <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                            <span className="text-indigo-400">{currentStep === 1 ? 'Initialising...' : 'Slicing Stream...'}</span>
+                            <span className="text-indigo-400">{statusMessage || 'Processing...'}</span>
                           </>
-                        ) : logs.some(log => log.type === 'error') ? (
-                          <span className="text-rose-400 flex items-center gap-1">⚠️ Extraction Failed</span>
+                        ) : extractionFailed ? (
+                          <span className="text-rose-400 flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            Extraction Failed
+                          </span>
                         ) : (
-                          <span className="text-emerald-400">✅ Clip Ready</span>
+                          <span className="text-emerald-400 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            {statusMessage}
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setShowRawLogs(v => !v)}
-                          className="text-[9px] font-mono text-white/50 hover:text-white border border-white/10 px-2 py-0.5 rounded bg-white/5 transition-colors"
-                        >
-                          {showRawLogs ? 'Hide Logs' : 'View Logs'}
-                        </button>
                         {!extracting && (
                           <button
-                            onClick={() => { setLogs([]); setProgress(0); }}
+                            onClick={() => {
+                              setExtractionFailed(false);
+                              setExtractionComplete(false);
+                              setStatusMessage('');
+                              setProgress(0);
+                              setShowReportPanel(false);
+                              setReportSent(null);
+                              setLastError('');
+                            }}
                             className="text-[9px] font-mono text-rose-400 hover:text-rose-300 border border-rose-950/40 px-2 py-0.5 rounded bg-rose-950/20 transition-colors font-bold"
                           >
                             Close
@@ -1153,44 +1126,67 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* Progress bar */}
                     <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden relative border border-slate-900">
                       <div
                         className={`h-full rounded-full transition-all duration-300 ease-out relative ${
-                          logs.some(log => log.type === 'error')
+                          extractionFailed
                             ? 'bg-rose-600'
                             : 'bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500'
                         }`}
                         style={{ width: `${progress}%` }}
                       >
-                        <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                        {!extractionFailed && <div className="absolute inset-0 bg-white/20 animate-pulse" />}
                       </div>
                     </div>
 
+                    {/* Time progress */}
                     <div className="flex justify-between text-[9px] text-slate-500 font-mono">
                       <span>Processed: {secsToHMS(Math.round((progress / 100) * clipLen))}</span>
                       <span>Target: {secsToHMS(clipLen)}</span>
                     </div>
 
-                    {showRawLogs && (
-                      <div className="mt-2.5 p-3 font-mono text-[10px] overflow-y-auto max-h-40 rounded-lg bg-black/85 border border-slate-800/80 space-y-1">
-                        {logs.map((log, i) => {
-                          let cls = 'text-slate-400';
-                          if (log.type === 'error') cls = 'text-rose-400 bg-rose-950/20 border-l border-rose-500 pl-1.5';
-                          if (log.type === 'success') cls = 'text-emerald-400 font-bold bg-emerald-950/20 border-l border-emerald-500 pl-1.5';
-                          if (log.type === 'system') cls = 'text-cyan-400 border-l border-cyan-500 pl-1.5';
-                          if (log.type === 'info') {
-                            if (log.text.includes('WARNING') || log.text.includes('[Warning')) cls = 'text-amber-500/80';
-                            else if (log.text.includes('ERROR')) cls = 'text-rose-400';
-                            else if (log.text.includes('%')) cls = 'text-indigo-300';
-                            else if (log.text.includes('[download]')) cls = 'text-indigo-400';
-                            else if (log.text.includes('[ffmpeg]')) cls = 'text-violet-400';
-                            else if (log.text.startsWith('frame=')) cls = 'text-sky-400';
-                          }
-                          return (
-                            <div key={i} className={`leading-relaxed break-all ${cls}`}>{log.text}</div>
-                          );
-                        })}
-                        <div ref={terminalEndRef} />
+                    {/* Human-readable error message */}
+                    {extractionFailed && lastError && (
+                      <div className="bg-rose-950/20 border border-rose-900/40 rounded-lg p-2.5 text-[10px] text-rose-300 leading-relaxed">
+                        {lastError}
+                      </div>
+                    )}
+
+                    {/* Report Issue */}
+                    {extractionFailed && (
+                      <div className="pt-0.5">
+                        {!showReportPanel ? (
+                          <button
+                            onClick={() => setShowReportPanel(true)}
+                            className="w-full py-1.5 rounded-lg text-[9px] font-semibold border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 hover:bg-slate-800/40 transition-all"
+                          >
+                            Report Issue
+                          </button>
+                        ) : reportSent === 'success' ? (
+                          <div className="text-center text-[9px] text-emerald-400 py-1.5 border border-emerald-900/40 rounded-lg bg-emerald-950/20">
+                            ✓ Report sent successfully.
+                          </div>
+                        ) : reportSent === 'error' ? (
+                          <div className="text-center text-[9px] text-rose-400 py-1.5 border border-rose-900/40 rounded-lg bg-rose-950/20">
+                            ✗ Unable to send report.
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleReport}
+                              className="flex-1 py-1.5 rounded-lg text-[9px] font-bold bg-rose-800/60 hover:bg-rose-700/70 border border-rose-700/50 text-rose-200 hover:text-white transition-all"
+                            >
+                              Send Report
+                            </button>
+                            <button
+                              onClick={() => setShowReportPanel(false)}
+                              className="px-3 py-1.5 rounded-lg text-[9px] text-slate-400 hover:text-white border border-slate-800 hover:border-slate-600 transition-all"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
