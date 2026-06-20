@@ -153,9 +153,9 @@ function getCommonArgsConfig(quality = '', customCookiePath = null) {
   }
   const hasValidCookies = cookieExists && cookieSize > 0;
 
-  // If cookies are active, prioritize 'web' since mobile clients do not support cookies in yt-dlp.
+  // If cookies are active, prioritize 'tv_embedded,web_embedded,web' since 'web' alone suffers from SABR (missing URL) blocks.
   // Otherwise, use the standard android_vr,web,android client stack.
-  const playerClient = hasValidCookies ? 'web' : 'android_vr,web,android';
+  const playerClient = hasValidCookies ? 'tv_embedded,web_embedded,web' : 'android_vr,web,android';
 
   const args = [
     '--ignore-config',
