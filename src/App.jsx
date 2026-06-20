@@ -144,8 +144,6 @@ export default function App() {
   const [extractionFailed, setExtractionFailed] = useState(false);
   const [extractionComplete, setExtractionComplete] = useState(false);
   const [lastError, setLastError] = useState('');
-  const [showReportPanel, setShowReportPanel] = useState(false);
-  const [reportSent, setReportSent] = useState(null);
   const [clipsHistory, setClipsHistory] = useState([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
@@ -472,28 +470,7 @@ export default function App() {
       .catch(() => { });
   };
 
-  // ── Report Issue ────────────────────────────────────────────────────────────────────────────────
-  const handleReport = () => {
-    const reportData = {
-      timestamp: new Date().toISOString(),
-      youtubeUrl: youtubeUrl,
-      quality: selectedQuality,
-      format: selectedFormat,
-      browser: navigator.userAgent.substring(0, 150),
-      platform: navigator.platform,
-      stage: currentStep === 1 ? 'Preparing' : currentStep === 2 ? 'Extracting' : 'Unknown',
-      errorMessage: lastError
-    };
 
-    fetch('/api/report', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(reportData)
-    })
-      .then(r => r.json())
-      .then(data => setReportSent(data.success ? 'success' : 'error'))
-      .catch(() => setReportSent('error'));
-  };
 
   // ── Extract clip ────────────────────────────────────────────────────────────────────────────────
   const handleExtract = () => {
@@ -512,8 +489,6 @@ export default function App() {
     setStatusMessage('Preparing clip...');
     setExtractionFailed(false);
     setExtractionComplete(false);
-    setShowReportPanel(false);
-    setReportSent(null);
     setLastError('');
 
     // Step 1: Initiate job
@@ -1181,43 +1156,6 @@ export default function App() {
                     {extractionFailed && lastError && (
                       <div className="bg-rose-950/20 border border-rose-900/40 rounded-lg p-2.5 text-[10px] text-rose-300 leading-relaxed">
                         {lastError}
-                      </div>
-                    )}
-
-                    {/* Report Issue */}
-                    {extractionFailed && (
-                      <div className="pt-0.5">
-                        {!showReportPanel ? (
-                          <button
-                            onClick={() => setShowReportPanel(true)}
-                            className="w-full py-1.5 rounded-lg text-[9px] font-semibold border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 hover:bg-slate-800/40 transition-all"
-                          >
-                            Report Issue
-                          </button>
-                        ) : reportSent === 'success' ? (
-                          <div className="text-center text-[9px] text-emerald-400 py-1.5 border border-emerald-900/40 rounded-lg bg-emerald-950/20">
-                            ✓ Report sent successfully.
-                          </div>
-                        ) : reportSent === 'error' ? (
-                          <div className="text-center text-[9px] text-rose-400 py-1.5 border border-rose-900/40 rounded-lg bg-rose-950/20">
-                            ✗ Unable to send report.
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={handleReport}
-                              className="flex-1 py-1.5 rounded-lg text-[9px] font-bold bg-rose-800/60 hover:bg-rose-700/70 border border-rose-700/50 text-rose-200 hover:text-white transition-all"
-                            >
-                              Send Report
-                            </button>
-                            <button
-                              onClick={() => setShowReportPanel(false)}
-                              className="px-3 py-1.5 rounded-lg text-[9px] text-slate-400 hover:text-white border border-slate-800 hover:border-slate-600 transition-all"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>

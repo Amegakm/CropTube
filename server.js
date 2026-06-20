@@ -161,6 +161,15 @@ function getCommonArgsConfig(quality = '', customCookiePath = null) {
   }
   const hasValidCookies = cookieExists && cookieSize > 0;
 
+  if (customCookiePath && fs.existsSync(customCookiePath)) {
+    console.log(`[Cookies] Using temporary job cookie file`);
+  } else if (!customCookiePath && fs.existsSync(globalCookiePath)) {
+    console.log(`[Cookies] Using global cookie file`);
+    if (cookieSize === 0) {
+      sendTelegramAlert('Cookie Persistence', 'N/A', 'N/A', 'N/A', 'Global cookie file size became 0 bytes.', 'N/A');
+    }
+  }
+
   // If cookies are active, prioritize 'tv_embedded,web_embedded,web' since 'web' alone suffers from SABR (missing URL) blocks.
   // Otherwise, use the standard android_vr,web,android client stack.
   const playerClient = hasValidCookies ? 'tv_embedded,web_embedded,web' : 'android_vr,web,android';
@@ -248,6 +257,7 @@ app.get('/api/search', async (req, res) => {
 
 // GET /api/formats: Get available resolutions and formats for a YouTube video
 app.get('/api/formats', async (req, res) => {
+  try {
   const { url } = req.query;
   if (!url) {
     return res.status(400).json({ error: 'Missing video URL.' });
@@ -290,6 +300,8 @@ app.get('/api/formats', async (req, res) => {
             ? "YouTube bot detection triggered. Your pre-registered cookies may be expired or invalid. Please update your session cookies in Settings."
             : "YouTube bot detection triggered. Please register YouTube authentication cookies in Settings to bypass this on cloud/datacenter IPs.")
         : "Failed to retrieve video formats.";
+
+      sendTelegramAlert('Format Retrieval', url, 'N/A', 'N/A', stderrData, 'N/A');
 
       return res.status(isBot ? 403 : 500).json({ error: errorMsg });
     }
@@ -375,6 +387,11 @@ app.get('/api/formats', async (req, res) => {
       res.status(500).json({ error: 'Failed to process format list.' });
     }
   });
+  } catch (err) {
+    console.error('[Formats] Unexpected error:', err);
+    sendTelegramAlert('Format Retrieval Exception', req.query.url, 'N/A', 'N/A', err.stack || err.message, 'N/A');
+    res.status(500).json({ error: 'Failed to retrieve video formats.' });
+  }
 });
 
 // Active extraction jobs registry
@@ -438,12 +455,14 @@ app.post('/api/extract/initiate', (req, res) => {
     return res.json({ fileId });
   } catch (err) {
     console.error('[Initiate] Unexpected error:', err);
+    sendTelegramAlert('Initiate Job Exception', req.body.url, req.body.quality, req.body.format_id, err.stack || err.message, 'N/A');
     return res.status(500).json({ error: 'Clip extraction failed. Please try again.' });
   }
 });
 
 // Step 2: Stream logs via SSE using the cached job settings
 app.get('/api/extract/stream', async (req, res) => {
+  try {
   const { fileId } = req.query;
 
   // Set headers for Server-Sent Events (SSE)
@@ -499,6 +518,7 @@ app.get('/api/extract/stream', async (req, res) => {
   // format_id is required — refuse extraction if missing
   if (!format_id || format_id === 'none') {
     console.error(`[Extract] Missing format_id — aborting.`);
+    sendTelegramAlert('Extraction - Missing Format', url, quality, format_id, 'Missing format_id parameter', fileId);
     logToClient('error', 'Unable to fetch video information. Please reload and try again.');
     clearInterval(keepaliveInterval);
     return res.end();
@@ -610,9 +630,14 @@ app.get('/api/extract/stream', async (req, res) => {
       } catch (_) {}
     }
 
+    if (!hasCookies && fs.existsSync(globalCookiePath)) {
+      console.log(`[Cookies] Preserved global cookie file`);
+    }
+
     if (hasCookies && fs.existsSync(cookiePath)) {
       try {
         fs.unlinkSync(cookiePath);
+        console.log(`[Cookies] Deleted temporary job cookie file`);
         console.log(`[Cleanup] Deleted temporary Netscape cookie file for Job: ${fileId}`);
       } catch (unlinkErr) {
         console.error('[Cleanup] Failed to delete temporary cookie file:', unlinkErr);
@@ -628,6 +653,7 @@ app.get('/api/extract/stream', async (req, res) => {
 
   child.on('error', (err) => {
     console.error(`[Extract] Process error: ${err.message}`);
+    sendTelegramAlert('Extraction - Spawn Error', url, quality, format_id, err.message, fileId);
     if (!res.writableEnded) {
       res.write(`data: ${JSON.stringify({ type: 'error', message: 'Clip extraction failed. Please try again.' })}\n\n`, 'utf8', () => {
         finish();
@@ -657,6 +683,7 @@ app.get('/api/extract/stream', async (req, res) => {
       }
     } else {
       console.error(`[Extract] Process terminated (code ${code}). Output exists: ${fs.existsSync(outputPath)}`);
+      sendTelegramAlert('Extraction - Process Error', url, quality, format_id, `Exit Code: ${code}\nStderr: ${stderrBuffer.substring(0, 300)}`, fileId);
       const isCookieError = stderrBuffer.includes("Sign in to confirm you're not a bot") ||
                             stderrBuffer.includes('Sign in to confirm your age') ||
                             stderrBuffer.includes('cookies have');
@@ -690,6 +717,10 @@ app.get('/api/extract/stream', async (req, res) => {
     console.log(`[Abort] SSE client closed connection for Job: ${fileId}`);
     finish();
   });
+  } catch (err) {
+    console.error('[Extract Stream] Unexpected error:', err);
+    sendTelegramAlert('Extraction - Stream Exception', req.query.url, 'N/A', 'N/A', err.stack || err.message, req.query.fileId);
+  }
 });
 
 // Check if global pre-registered cookies exist
@@ -729,52 +760,51 @@ app.delete('/api/settings/cookies', (req, res) => {
   }
 });
 
-// POST /api/report: Submit an error report to Telegram
-app.post('/api/report', (req, res) => {
-  const { timestamp, quality, format, browser, platform, stage, errorMessage } = req.body;
-  const youtubeUrl = req.body.youtubeUrl || req.body.youtube_url || 'N/A';
+// ----------------------------------------------------
+// TELEGRAM AUTOMATIC ERROR REPORTING
+// ----------------------------------------------------
+const errorCache = new Map();
 
+function sendTelegramAlert(stage, url, quality, format_id, errorMessage, jobId = 'N/A') {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
-  if (!botToken || !chatId) {
-    console.error('[Report] Telegram credentials not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID).');
-    return res.status(503).json({ success: false });
-  }
+  if (!botToken || !chatId) return;
 
-  // Sanitize error message — strip file paths, long tokens, cookie fragments
+  const hash = `${stage}|${url}|${errorMessage}`;
+  const now = Date.now();
+  if (errorCache.has(hash)) {
+    if (now - errorCache.get(hash) < 10 * 60 * 1000) return;
+  }
+  errorCache.set(hash, now);
+
   const sanitized = (errorMessage || 'Unknown error')
-    .replace(/[A-Za-z]:\\[\w\\\s.\-]+/g, '[path]') // Windows backslash paths
-    .replace(/[A-Za-z]:\/[\w\/\s.\-]+/g, '[path]') // Windows forward slash paths
-    .replace(/\/[\w/.\-]+/g, '[path]')             // Unix paths
-    .replace(/[A-Za-z0-9+/=]{40,}/g, '[redacted]') // Long tokens / cookies
+    .replace(/[A-Za-z]:\\[\w\s.\-]+/g, '[path]')
+    .replace(/[A-Za-z]:\/[\w\s.\-]+/g, '[path]')
+    .replace(/\/[\w.\-]+/g, '[path]')
+    .replace(/[A-Za-z0-9+/=]{40,}/g, '[redacted]')
+    .replace(/(?:SID|SAPISID|APISID|LOGIN_INFO)=[^;\s]+/gi, '[redacted]')
+    .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '[ip]')
     .substring(0, 500);
 
   const text = [
-    '🚨 CropTube Error Report',
-    '',
-    `Time: ${timestamp || 'N/A'}`,
-    `URL: ${youtubeUrl}`,
+    '🚨 CropTube Error', '',
+    `Time: ${new Date().toISOString()}`,
+    `Environment: ${process.env.NODE_ENV || 'production'}`,
+    `Stage: ${stage}`,
+    `Job ID: ${jobId}`,
+    `URL: ${url || 'N/A'}`,
     `Quality: ${quality || 'N/A'}`,
-    `Format: ${format || 'N/A'}`,
-    `Browser: ${browser || 'N/A'}`,
-    `Platform: ${platform || 'N/A'}`,
-    `Stage: ${stage || 'N/A'}`,
-    '',
-    'Error:',
-    sanitized
+    `Format ID: ${format_id || 'N/A'}`,
+    '', 'Error:', sanitized
   ].join('\n');
 
   const payload = JSON.stringify({ chat_id: chatId, text });
-
   const options = {
     hostname: 'api.telegram.org',
     path: `/bot${botToken}/sendMessage`,
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(payload)
-    }
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
   };
 
   const tgReq = https.request(options, (tgRes) => {
@@ -783,29 +813,20 @@ app.post('/api/report', (req, res) => {
     tgRes.on('end', () => {
       try {
         const parsed = JSON.parse(data);
-        if (parsed.ok) {
-          res.json({ success: true });
-        } else {
-          console.error('[Report] Telegram API error:', parsed.description);
-          res.status(500).json({ success: false });
-        }
-      } catch (_) {
-        res.status(500).json({ success: false });
-      }
+        if (parsed.ok) console.log('[Telegram Alert] Sent successfully');
+        else console.log(`[Telegram Alert] Failed: ${parsed.description}`);
+      } catch (_) { console.log('[Telegram Alert] Failed: Invalid response'); }
     });
   });
 
-  tgReq.on('error', (err) => {
-    console.error('[Report] Telegram request failed:', err.message);
-    res.status(500).json({ success: false });
-  });
-
+  tgReq.on('error', (err) => console.log(`[Telegram Alert] Failed: ${err.message}`));
   tgReq.write(payload);
   tgReq.end();
-});
+}
 
 // Download Endpoint - Downloads clip then immediately cleans it up
 app.get('/api/download/:fileId', (req, res) => {
+  try {
   const { fileId } = req.params;
 
   if (!fs.existsSync(tempDir)) {
@@ -827,6 +848,7 @@ app.get('/api/download/:fileId', (req, res) => {
   res.download(filePath, `CropTube_Clip_${fileId}${ext}`, (err) => {
     if (err) {
       console.error(`[Delivery] Error downloading file:`, err);
+      sendTelegramAlert('Delivery - Download Error', 'N/A', 'N/A', 'N/A', err.message, fileId);
     }
     // Delete file immediately after response closes
     try {
@@ -838,6 +860,9 @@ app.get('/api/download/:fileId', (req, res) => {
       console.error('[Delivery] Error deleting file:', unlinkErr);
     }
   });
+  } catch (err) {
+    sendTelegramAlert('Delivery - Exception', 'N/A', 'N/A', 'N/A', err.stack || err.message, req.params.fileId);
+  }
 });
 
 // ----------------------------------------------------
