@@ -384,6 +384,12 @@ const activeJobs = new Map();
 app.post('/api/extract/initiate', (req, res) => {
   try {
     const { url, start, end, format, quality, format_id, cookies } = req.body;
+    
+    const loggedBody = { ...req.body };
+    if (loggedBody.cookies) {
+      loggedBody.cookies = '[REDACTED]';
+    }
+    console.log(`[Initiate Backend Log] Request body received:`, JSON.stringify(loggedBody, null, 2));
 
     if (!url || !start || !end) {
       return res.status(400).json({ error: 'Missing required parameters: url, start, end timestamps.' });

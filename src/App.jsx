@@ -394,8 +394,10 @@ export default function App() {
 
   // ── Resolve exact yt-dlp format_id reactively ──────────────────────────────
   useEffect(() => {
+    console.log(`[Format Resolution] selectedQuality: ${selectedQuality}, selectedFormat: ${selectedFormat}, rawFormats count: ${rawFormats.length}`);
     if (!rawFormats || rawFormats.length === 0) {
       setSelectedFormatId('none');
+      console.log(`[Format Resolution] Resolved selectedFormatId: none (empty rawFormats)`);
       return;
     }
 
@@ -405,7 +407,9 @@ export default function App() {
       const audioExt = selectedFormat === 'webm-audio' ? 'webm' : (selectedFormat === 'mp3' ? 'mp3' : selectedFormat);
       const match = rawFormats.find(f => f.acodec !== 'none' && f.vcodec === 'none' && f.ext === audioExt) ||
                     rawFormats.find(f => f.acodec !== 'none' && f.vcodec === 'none');
-      setSelectedFormatId(match ? match.format_id : 'bestaudio');
+      const resolvedId = match ? match.format_id : 'bestaudio';
+      setSelectedFormatId(resolvedId);
+      console.log(`[Format Resolution] Resolved selectedFormatId (audio): ${resolvedId}`);
     } else {
       const targetHeight = parseInt(selectedQuality) || 1080;
       const matchingHeight = rawFormats.filter(f => (f.label === selectedQuality || f.height === targetHeight) && f.vcodec !== 'none');
@@ -415,7 +419,9 @@ export default function App() {
                             rawFormats.find(f => f.label === selectedQuality || f.height === targetHeight) ||
                             rawFormats.find(f => f.vcodec !== 'none');
                             
-      setSelectedFormatId(containerMatch ? containerMatch.format_id : 'none');
+      const resolvedId = containerMatch ? containerMatch.format_id : 'none';
+      setSelectedFormatId(resolvedId);
+      console.log(`[Format Resolution] Resolved selectedFormatId (video): ${resolvedId}, targetHeight: ${targetHeight}, matchingHeight count: ${matchingHeight.length}`);
     }
   }, [selectedFormat, selectedQuality, rawFormats]);
 
@@ -519,6 +525,8 @@ export default function App() {
       format_id: selectedFormatId,
       cookies: cookies
     };
+
+    console.log(`[Initiate Payload Log] Sending payload:`, JSON.stringify(payload, null, 2));
 
 
     fetch('/api/extract/initiate', {
@@ -1193,9 +1201,9 @@ export default function App() {
                 ) : (
                   <button
                     onClick={handleExtract}
-                    disabled={!videoId || clipLen <= 0}
+                    disabled={!videoId || clipLen <= 0 || selectedFormatId === 'none' || selectedFormatId === '' || isLoadingFormats}
                     className={`w-full py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all duration-200
-                      ${!videoId || clipLen <= 0
+                      ${!videoId || clipLen <= 0 || selectedFormatId === 'none' || selectedFormatId === '' || isLoadingFormats
                         ? 'bg-slate-900/40 text-slate-600 border border-slate-900 cursor-not-allowed'
                         : 'bg-white hover:bg-slate-100 text-slate-950 shadow-lg hover:scale-[1.01] active:scale-[0.99]'
                       }`}
