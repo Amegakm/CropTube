@@ -665,6 +665,7 @@ app.get('/api/debug/formats', async (req, res) => {
   const config = getCommonArgsConfig('4K');
   const args = [
     ...config.args,
+    '-v',
     '--dump-single-json',
     '--skip-download',
     '--no-warnings',
