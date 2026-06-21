@@ -169,10 +169,19 @@ export default function App() {
   const ytApiReady = useRef(false);
 
   const handleSearch = () => {
-    if (!youtubeUrl.trim()) return;
+    if (isSearching) return;
+    const trimmed = youtubeUrl.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      return;
+    }
+    const isUrl = /(?:youtu\.be\/|[?&]v=|shorts\/|embed\/)([A-Za-z0-9_-]{11})/.test(trimmed) || trimmed.startsWith('http');
+    if (isUrl) {
+      return; // Do NOT run search for URLs
+    }
     setIsSearching(true);
     setErrorMsg('');
-    fetch(`/api/search?q=${encodeURIComponent(youtubeUrl)}`)
+    fetch(`/api/search?q=${encodeURIComponent(trimmed)}`)
       .then(r => {
         if (!r.ok) throw new Error('Search failed');
         return r.json();
@@ -193,7 +202,8 @@ export default function App() {
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
-      const isUrl = /(?:youtu\.be\/|[?&]v=)([A-Za-z0-9_-]{11})/.test(youtubeUrl) || youtubeUrl.startsWith('http');
+      const trimmed = youtubeUrl.trim();
+      const isUrl = /(?:youtu\.be\/|[?&]v=|shorts\/|embed\/)([A-Za-z0-9_-]{11})/.test(trimmed) || trimmed.startsWith('http');
       if (!isUrl) {
         handleSearch();
       }
@@ -219,7 +229,7 @@ export default function App() {
       setStartTime('00:00:00'); setEndTime('00:00:00'); setErrorMsg('');
       return;
     }
-    const m = youtubeUrl.match(/(?:youtu\.be\/|[?&]v=)([A-Za-z0-9_-]{11})/);
+    const m = youtubeUrl.match(/(?:youtu\.be\/|[?&]v=|shorts\/|embed\/)([A-Za-z0-9_-]{11})/);
     if (m) {
       setVideoId(m[1]);
       setErrorMsg('');
@@ -232,44 +242,6 @@ export default function App() {
         setErrorMsg('');
       }
     }
-  }, [youtubeUrl]);
-
-  // ── Debounced Search Effect ───────────────────────────────────────────────
-  useEffect(() => {
-    if (!youtubeUrl.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    const isUrl = /(?:youtu\.be\/|[?&]v=)([A-Za-z0-9_-]{11})/.test(youtubeUrl) || youtubeUrl.startsWith('http');
-    if (isUrl) {
-      setSearchResults([]);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setIsSearching(true);
-      setErrorMsg('');
-      fetch(`/api/search?q=${encodeURIComponent(youtubeUrl)}`)
-        .then(r => {
-          if (!r.ok) throw new Error('Search failed');
-          return r.json();
-        })
-        .then(data => {
-          setSearchResults(data.entries || []);
-          if ((data.entries || []).length === 0) {
-            setErrorMsg('No results found.');
-          }
-        })
-        .catch(err => {
-          setErrorMsg('Failed to fetch search results.');
-        })
-        .finally(() => {
-          setIsSearching(false);
-        });
-    }, 500);
-
-    return () => clearTimeout(timer);
   }, [youtubeUrl]);
 
   // ── Load YouTube IFrame API once ──────────────────────────────────────────
