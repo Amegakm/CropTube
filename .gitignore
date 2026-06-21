@@ -24,3 +24,6 @@ bin/
 # Operating System files
 .DS_Store
 Thumbs.db
+
+# Gemini IDE Configuration
+.gemini/
