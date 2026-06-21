@@ -105,22 +105,22 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
         <button
           onClick={handleGrab}
           disabled={!playerReady || disabled}
-          className="flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-semibold
+          className="flex items-center justify-center gap-1 py-2 sm:py-1 rounded-lg text-xs sm:text-[10px] font-semibold
             bg-slate-950 hover:bg-slate-800 border border-slate-800
             text-slate-300 hover:text-white transition-all
-            disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled:opacity-40 disabled:cursor-not-allowed min-h-[36px] sm:min-h-0"
         >
-          <Crosshair className="w-2.5 h-2.5" />
+          <Crosshair className="w-3 h-3 sm:w-2.5 sm:h-2.5" />
           Grab
         </button>
 
         <button
           onClick={handleSeek}
           disabled={!playerReady || disabled}
-          className={`flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-semibold
+          className={`flex items-center justify-center gap-1 py-2 sm:py-1 rounded-lg text-xs sm:text-[10px] font-semibold
             bg-indigo-950/45 hover:bg-indigo-900/60 border border-indigo-900/50
             text-indigo-300 hover:text-indigo-100 transition-all
-            disabled:opacity-40 disabled:cursor-not-allowed
+            disabled:opacity-40 disabled:cursor-not-allowed min-h-[36px] sm:min-h-0
             ${seeked ? 'seek-pulse' : ''}`}
         >
           Seek ▶
@@ -695,21 +695,21 @@ export default function App() {
     return (
       <div className="min-h-screen w-full dynamic-mesh-bg flex items-center justify-center p-4 sm:p-6 md:p-8 lg:p-10 font-sans antialiased text-slate-200">
         {renderModal()}
-        <div className="w-full max-w-2xl lg:max-w-[1400px] aspect-[16/10] glass-panel rounded-[32px] p-6 sm:p-10 flex flex-col justify-between overflow-hidden relative">
+        <div className="w-full max-w-2xl lg:max-w-[1400px] lg:aspect-[16/10] min-h-[90vh] lg:min-h-0 glass-panel rounded-[32px] p-6 sm:p-10 flex flex-col justify-between overflow-hidden relative">
           {/* Subtle top decoration */}
           <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-black/40 to-transparent pointer-events-none" />
 
           {/* Header Navigation */}
-          <div className="flex justify-between items-center text-xs text-white/50 z-10 animate-fade-in-up">
+          <div className="flex flex-col xs:flex-row gap-3 xs:gap-0 justify-between items-center text-xs text-white/50 z-10 animate-fade-in-up">
             <span className="font-bold tracking-widest text-[10px] text-white">CROPTUBE</span>
-            <div className="flex gap-6">
+            <div className="flex gap-4 sm:gap-6 text-[10px] sm:text-xs">
               <span onClick={() => setActiveModal('about')} className="hover:text-white cursor-pointer transition-colors">About</span>
               <span onClick={() => setActiveModal('works')} className="hover:text-white cursor-pointer transition-colors">Works</span>
               <span onClick={() => setActiveModal('services')} className="hover:text-white cursor-pointer transition-colors">Services</span>
             </div>
             <button 
               onClick={() => setActiveModal('docs')}
-              className="px-3.5 py-1.5 border border-white/10 hover:border-white/30 hover:bg-white/5 rounded-full transition-all text-[10px] font-medium text-white flex items-center gap-1"
+              className="px-3 py-1 sm:px-3.5 sm:py-1.5 border border-white/10 hover:border-white/30 hover:bg-white/5 rounded-full transition-all text-[9px] sm:text-[10px] font-medium text-white flex items-center gap-1"
             >
               Docs &amp; Guide ↗
             </button>
@@ -754,16 +754,16 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen w-full dynamic-mesh-bg flex items-center justify-center p-4 sm:p-6 md:p-8 font-sans antialiased text-slate-200">
+    <div className="min-h-screen w-full dynamic-mesh-bg flex items-center justify-center p-2 sm:p-6 md:p-8 font-sans antialiased text-slate-200">
       {renderModal()}
-      <div className="w-full max-w-2xl lg:max-w-[1480px] glass-panel rounded-[32px] p-6 sm:p-8 space-y-6 relative overflow-hidden">
+      <div className="w-full max-w-2xl lg:max-w-[1480px] glass-panel rounded-[24px] sm:rounded-[32px] p-4 sm:p-8 space-y-6 relative overflow-hidden">
 
         {/* Subtle top decoration */}
         <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-black/40 to-transparent pointer-events-none" />
 
         {/* Header & Status */}
-        <div className="flex justify-between items-center z-10 relative">
-          <div className="flex items-center gap-2.5">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-0 justify-between items-start sm:items-center z-10 relative">
+          <div className="flex items-center gap-2 sm:gap-2.5">
             <button
               onClick={() => setShowDashboard(false)}
               className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white/70 hover:text-white transition-all text-xs font-bold"
@@ -775,13 +775,13 @@ export default function App() {
               <Scissors className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h1 className="font-extrabold text-lg tracking-tight text-white font-sans">
+              <h1 className="font-extrabold text-base sm:text-lg tracking-tight text-white font-sans">
                 Crop<span className="text-indigo-400">Tube</span>
               </h1>
-              <p className="text-[9px] text-slate-500 uppercase tracking-widest font-semibold">Surgical Extractor</p>
+              <p className="text-[8px] sm:text-[9px] text-slate-500 uppercase tracking-widest font-semibold">Surgical Extractor</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-[9px] bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-full text-slate-400">
+          <div className="flex items-center gap-1.5 text-[8px] sm:text-[9px] bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-full text-slate-400">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             <span>Cloud API Active</span>
           </div>
@@ -803,11 +803,79 @@ export default function App() {
         {/* Main Layout Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
           
-          {/* Left Column: URL, Formats, Preview and Slicing Range (7/12 cols on desktop) */}
+          {/* Left Column: Auth, URL, Preview (7/12 cols on desktop) */}
           <div className="lg:col-span-7 space-y-6">
-            {/* 1. LOAD VIDEO */}
+            
+            {/* 1. YOUTUBE AUTH COOKIES */}
             <div className="space-y-2">
-              <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">1. Load Video URL</label>
+              <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">1. YouTube Auth Cookies</label>
+              <div className="space-y-1.5">
+                <button
+                  onClick={() => setShowCookies(v => !v)}
+                  className="w-full flex justify-between items-center px-3 py-2.5 rounded-xl bg-slate-900/40 border border-slate-800 hover:border-amber-700/50 transition-all group"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase group-hover:text-amber-400 transition-colors">
+                      🔑 Access Cookies
+                    </span>
+                    {hasGlobalCookies ? (
+                      <span className="text-[9px] text-emerald-400 bg-emerald-950/50 border border-emerald-800/60 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-amber-400 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded-full">
+                        Required for cloud
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-slate-600 text-[10px]">{showCookies ? '▲' : '▼'}</span>
+                </button>
+
+                {showCookies && (
+                  <div className="p-3 bg-slate-950/60 border border-amber-900/30 rounded-xl space-y-2.5">
+                    <div className="text-[9px] text-amber-400/80 bg-amber-950/20 border border-amber-900/30 rounded-lg p-2 leading-relaxed">
+                      <strong className="text-amber-400">⚠ Required on cloud servers.</strong> YouTube blocks datacenter IPs.
+                      Export cookies using <span className="font-mono bg-black/40 px-1 rounded">"Get cookies.txt LOCALLY"</span> Chrome extension → paste below → Register.
+                    </div>
+                    <textarea
+                      value={cookies}
+                      onChange={e => setCookies(e.target.value)}
+                      placeholder={'# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t...\tSID\t...'}
+                      rows={4}
+                      disabled={extracting}
+                      className="w-full p-2.5 bg-black/50 border border-slate-800 focus:border-amber-700/60
+                        text-[9px] text-slate-400 font-mono rounded-lg outline-none resize-none
+                        placeholder-slate-700 disabled:opacity-50 transition-colors"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveCookies}
+                        disabled={!cookies.trim() || extracting}
+                        className="flex-1 py-2 rounded-lg text-[10px] font-bold transition-all
+                          bg-amber-600 hover:bg-amber-500 text-white
+                          disabled:bg-slate-900 disabled:text-slate-600 disabled:cursor-not-allowed"
+                      >
+                        Register on Server
+                      </button>
+                      {hasGlobalCookies && (
+                        <button
+                          onClick={deleteCookies}
+                          disabled={extracting}
+                          className="px-3 py-2 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40
+                            text-rose-400 rounded-lg text-[10px] font-semibold transition-all"
+                        >
+                          Purge
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 2. LOAD VIDEO URL */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">2. Load Video URL</label>
               <div className="relative">
                 <input
                   type="text"
@@ -819,7 +887,7 @@ export default function App() {
                   onKeyDown={handleKeyDown}
                   placeholder="Paste YouTube link or type search keywords..."
                   disabled={extracting}
-                  className="w-full pl-3 pr-20 py-2.5 bg-slate-900/40 border border-slate-800 focus:border-indigo-500
+                  className="w-full pl-3 pr-20 py-3 bg-slate-900/40 border border-slate-800 focus:border-indigo-500
                     rounded-xl outline-none text-xs text-slate-200 placeholder-slate-600
                     transition-all focus:ring-1 focus:ring-indigo-500/20 disabled:opacity-50"
                 />
@@ -830,16 +898,16 @@ export default function App() {
                       className="text-slate-500 hover:text-rose-400 text-xs transition-colors p-1"
                       title="Clear"
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                   <button
                     onClick={handleSearch}
                     disabled={extracting || isSearching || !youtubeUrl.trim()}
-                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg p-1.5 transition-colors"
+                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg p-2 transition-colors"
                     title="Search YouTube"
                   >
-                    {isSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -878,9 +946,9 @@ export default function App() {
               )}
             </div>
 
-            {/* 2. VIDEO STREAM PREVIEW */}
+            {/* 3. VIDEO PREVIEW */}
             <div className="space-y-2">
-              <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">2. Video Stream Preview</label>
+              <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">3. Video Preview</label>
               {videoId ? (
                 <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/5 bg-black relative">
                   <div id="yt-player-wrap" className="w-full h-full" />
@@ -895,23 +963,24 @@ export default function App() {
                   </p>
                   <button
                     onClick={() => setShowDashboard(false)}
-                    className="mt-1 text-[10px] text-indigo-300 hover:text-indigo-200 border border-indigo-900/50 bg-indigo-950/25 px-3 py-1 rounded-full transition-all"
+                    className="mt-1 text-[10px] text-indigo-300 hover:text-indigo-200 border border-indigo-900/50 bg-indigo-950/25 px-3.5 py-2 rounded-full transition-all"
                   >
                     ← Return to Home
                   </button>
                 </div>
               )}
             </div>
+
           </div>
 
-          {/* Right Column: Auth, Action Button, History (5/12 cols on desktop) */}
+          {/* Right Column: Slicing Range, Formats, Action Button, History (5/12 cols on desktop) */}
           <div className="lg:col-span-5 space-y-6 flex flex-col justify-between">
             <div className="space-y-6">
               
-              {/* 3. SET RANGE MARKERS */}
+              {/* 4. RANGE SELECTION */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">3. Set Range Markers</label>
-                <div className="grid grid-cols-2 gap-2.5">
+                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">4. Range Selection</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <TimeMarker
                     label="Start"
                     accent="text-emerald-400"
@@ -955,141 +1024,80 @@ export default function App() {
                 )}
               </div>
 
-              {/* 4. QUALITY & FORMAT DUAL SELECTORS */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">4. Format</label>
-                  <select
-                    value={selectedFormat}
-                    onChange={e => {
-                      const fmt = e.target.value;
-                      setSelectedFormat(fmt);
-                      if (fmt === 'mp3' || fmt === 'm4a') {
-                        setSelectedQuality('audio-320');
-                      } else {
-                        setSelectedQuality(availableResolutions.includes('1080p') ? '1080p' : (availableResolutions[0] || '1080p'));
-                      }
-                    }}
-                    disabled={extracting}
-                    className="w-full bg-slate-900/40 border border-slate-800 focus:border-indigo-500 text-slate-300
-                      py-2.5 px-3 rounded-xl outline-none text-xs transition-colors disabled:opacity-50"
-                  >
-                    <optgroup label="Video Formats">
-                      {availableVideoFormats.map(f => (
-                        <option key={f} value={f}>{f.toUpperCase()}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Audio Formats">
-                      {availableAudioFormats.map(f => (
-                        <option key={f} value={f}>{f.toUpperCase()}</option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Quality</label>
-                  <select
-                    value={selectedQuality}
-                    onChange={e => setSelectedQuality(e.target.value)}
-                    disabled={extracting}
-                    className="w-full bg-slate-900/40 border border-slate-800 focus:border-indigo-500 text-slate-300
-                      py-2.5 px-3 rounded-xl outline-none text-xs transition-colors disabled:opacity-50"
-                  >
-                    {selectedFormat === 'mp3' || selectedFormat === 'm4a' ? (
-                      <optgroup label="Audio Quality">
-                        <option value="audio-320">320kbps (High)</option>
-                        <option value="audio-256">256kbps</option>
-                        <option value="audio-192">192kbps (Medium)</option>
-                        <option value="audio-128">128kbps (Standard)</option>
-                        <option value="audio-m4a">Original Quality</option>
-                      </optgroup>
-                    ) : (
-                      <optgroup label="Video Quality">
-                        {availableResolutions.map(r => (
-                          <option key={r} value={r}>
-                            {r === '2160p' || r === '4K' ? '4K (2160p Video)' :
-                             r === '1440p' || r === '2K' ? '2K (1440p Video)' :
-                             r === '1080p' ? '1080p (Full HD Video)' :
-                             r === '720p' ? '720p (HD Video)' :
-                             r === '480p' ? '480p (Standard Video)' :
-                             r === '360p' ? '360p (Low Video)' : r}
-                          </option>
+              {/* 5. FORMAT & QUALITY */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">5. Format & Quality</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Format</span>
+                    <select
+                      value={selectedFormat}
+                      onChange={e => {
+                        const fmt = e.target.value;
+                        setSelectedFormat(fmt);
+                        if (fmt === 'mp3' || fmt === 'm4a') {
+                          setSelectedQuality('audio-320');
+                        } else {
+                          setSelectedQuality(availableResolutions.includes('1080p') ? '1080p' : (availableResolutions[0] || '1080p'));
+                        }
+                      }}
+                      disabled={extracting}
+                      className="w-full bg-slate-900/40 border border-slate-800 focus:border-indigo-500 text-slate-300
+                        py-3 px-3 rounded-xl outline-none text-xs transition-colors disabled:opacity-50"
+                    >
+                      <optgroup label="Video Formats">
+                        {availableVideoFormats.map(f => (
+                          <option key={f} value={f}>{f.toUpperCase()}</option>
                         ))}
                       </optgroup>
-                    )}
-                  </select>
+                      <optgroup label="Audio Formats">
+                        {availableAudioFormats.map(f => (
+                          <option key={f} value={f}>{f.toUpperCase()}</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Quality</span>
+                    <select
+                      value={selectedQuality}
+                      onChange={e => setSelectedQuality(e.target.value)}
+                      disabled={extracting}
+                      className="w-full bg-slate-900/40 border border-slate-800 focus:border-indigo-500 text-slate-300
+                        py-3 px-3 rounded-xl outline-none text-xs transition-colors disabled:opacity-50"
+                    >
+                      {selectedFormat === 'mp3' || selectedFormat === 'm4a' ? (
+                        <optgroup label="Audio Quality">
+                          <option value="audio-320">320kbps (High)</option>
+                          <option value="audio-256">256kbps</option>
+                          <option value="audio-192">192kbps (Medium)</option>
+                          <option value="audio-128">128kbps (Standard)</option>
+                          <option value="audio-m4a">Original Quality</option>
+                        </optgroup>
+                      ) : (
+                        <optgroup label="Video Quality">
+                          {availableResolutions.map(r => (
+                            <option key={r} value={r}>
+                              {r === '2160p' || r === '4K' ? '4K (2160p Video)' :
+                               r === '1440p' || r === '2K' ? '2K (1440p Video)' :
+                               r === '1080p' ? '1080p (Full HD Video)' :
+                               r === '720p' ? '720p (HD Video)' :
+                               r === '480p' ? '480p (Standard Video)' :
+                               r === '360p' ? '360p (Low Video)' : r}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </div>
                 </div>
               </div>
 
-
-              {/* ── YouTube Auth (required on cloud IPs) ───────────────── */}
-              <div className="space-y-1.5">
-                <button
-                  onClick={() => setShowCookies(v => !v)}
-                  className="w-full flex justify-between items-center px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-800 hover:border-amber-700/50 transition-all group"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase group-hover:text-amber-400 transition-colors">
-                      🔑 YouTube Auth (Cookies)
-                    </span>
-                    {hasGlobalCookies ? (
-                      <span className="text-[9px] text-emerald-400 bg-emerald-950/50 border border-emerald-800/60 px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active
-                      </span>
-                    ) : (
-                      <span className="text-[9px] text-amber-400 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded-full">
-                        Required for cloud
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-slate-600 text-[10px]">{showCookies ? '▲' : '▼'}</span>
-                </button>
-
-                {showCookies && (
-                  <div className="p-3 bg-slate-950/60 border border-amber-900/30 rounded-xl space-y-2.5">
-                    <div className="text-[9px] text-amber-400/80 bg-amber-950/20 border border-amber-900/30 rounded-lg p-2 leading-relaxed">
-                      <strong className="text-amber-400">⚠ Required on cloud servers.</strong> YouTube blocks datacenter IPs.
-                      Export cookies using <span className="font-mono bg-black/40 px-1 rounded">"Get cookies.txt LOCALLY"</span> Chrome extension → paste below → Register.
-                    </div>
-                    <textarea
-                      value={cookies}
-                      onChange={e => setCookies(e.target.value)}
-                      placeholder={'# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t...\tSID\t...'}
-                      rows={4}
-                      disabled={extracting}
-                      className="w-full p-2 bg-black/50 border border-slate-800 focus:border-amber-700/60
-                        text-[9px] text-slate-400 font-mono rounded-lg outline-none resize-none
-                        placeholder-slate-700 disabled:opacity-50 transition-colors"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={saveCookies}
-                        disabled={!cookies.trim() || extracting}
-                        className="flex-1 py-1.5 rounded-lg text-[9px] font-bold transition-all
-                          bg-amber-600 hover:bg-amber-500 text-white
-                          disabled:bg-slate-900 disabled:text-slate-600 disabled:cursor-not-allowed"
-                      >
-                        Register on Server
-                      </button>
-                      {hasGlobalCookies && (
-                        <button
-                          onClick={deleteCookies}
-                          disabled={extracting}
-                          className="px-2.5 py-1.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40
-                            text-rose-400 rounded-lg text-[9px] font-semibold transition-all"
-                        >
-                          Purge
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Action Trigger / Progress Button */}
-              <div className="pt-2 border-t border-slate-900/40">
-              {(extracting || extractionFailed || extractionComplete) ? (
+              {/* 6. DOWNLOAD */}
+              <div className="space-y-2 pt-2 border-t border-slate-900/40">
+                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">6. Download</label>
+                {(extracting || extractionFailed || extractionComplete) ? (
                   <div className="w-full bg-slate-900/50 border border-slate-800 rounded-xl p-3.5 space-y-2.5 shadow-inner">
                     {/* Status header */}
                     <div className="flex justify-between items-center text-xs">
@@ -1119,11 +1127,9 @@ export default function App() {
                               setExtractionComplete(false);
                               setStatusMessage('');
                               setProgress(0);
-                              setShowReportPanel(false);
-                              setReportSent(null);
                               setLastError('');
                             }}
-                            className="text-[9px] font-mono text-rose-400 hover:text-rose-300 border border-rose-950/40 px-2 py-0.5 rounded bg-rose-950/20 transition-colors font-bold"
+                            className="text-[9px] font-mono text-rose-400 hover:text-rose-300 border border-rose-950/40 px-2 py-1 rounded bg-rose-950/20 transition-colors font-bold"
                           >
                             Close
                           </button>
