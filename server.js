@@ -342,20 +342,81 @@ app.get('/api/formats', async (req, res) => {
         console.log(`  [Raw Format #${idx + 1}] format_id: ${f.format_id}, ext: ${f.ext}, width: ${f.width || 'N/A'}, height: ${f.height || 'N/A'}, resolution: ${f.resolution || 'N/A'}, vcodec: ${f.vcodec || 'none'}, acodec: ${f.acodec || 'none'}`);
       });
 
-      // Helper function to map a height to nearest standard YouTube quality label
-      const getLabelForHeight = (height) => {
-        if (!height) return null;
+      // Helper function to classify format quality based on format_note, resolution, and width/height aspect ratios
+      const classifyFormatQuality = (f) => {
+        if (!f) return null;
+
         const STANDARD_HEIGHTS = [144, 240, 360, 480, 720, 1080, 1440, 2160];
-        let nearest = STANDARD_HEIGHTS[0];
-        let minDiff = Math.abs(height - nearest);
-        for (let i = 1; i < STANDARD_HEIGHTS.length; i++) {
-          const diff = Math.abs(height - STANDARD_HEIGHTS[i]);
-          if (diff < minDiff) {
-            minDiff = diff;
-            nearest = STANDARD_HEIGHTS[i];
+
+        // Helper to map an arbitrary height to the nearest standard label
+        const getNearestStandardLabel = (height) => {
+          if (!height) return null;
+          let nearest = STANDARD_HEIGHTS[0];
+          let minDiff = Math.abs(height - nearest);
+          for (let i = 1; i < STANDARD_HEIGHTS.length; i++) {
+            const diff = Math.abs(height - STANDARD_HEIGHTS[i]);
+            if (diff < minDiff) {
+              minDiff = diff;
+              nearest = STANDARD_HEIGHTS[i];
+            }
+          }
+          return `${nearest}p`;
+        };
+
+        // Priority 1: Use yt-dlp format_note if it contains a standard label (e.g. 2160p, 1080p, 1080p60)
+        if (f.format_note) {
+          const noteMatch = String(f.format_note).match(/(\d{3,4})p/i);
+          if (noteMatch) {
+            const pVal = parseInt(noteMatch[1], 10);
+            if (STANDARD_HEIGHTS.includes(pVal)) {
+              return `${pVal}p`;
+            }
           }
         }
-        return `${nearest}p`;
+
+        // Priority 2: Parse resolution metadata if width/height are missing (e.g. "3840x2160")
+        let w = f.width;
+        let h = f.height;
+        if ((!w || !h) && f.resolution) {
+          const resMatch = String(f.resolution).match(/(\d+)x(\d+)/);
+          if (resMatch) {
+            w = parseInt(resMatch[1], 10);
+            h = parseInt(resMatch[2], 10);
+          }
+        }
+
+        if (!w || !h) {
+          // If we only have height, fall back to nearest standard mapping
+          if (h) return getNearestStandardLabel(h);
+          return null;
+        }
+
+        // Priority 3: Width/height aspect-ratio-aware classification
+        const isVertical = h > w;
+        const longSide = isVertical ? h : w;
+        const shortSide = isVertical ? w : h;
+
+        if (!isVertical) {
+          // Horizontal / Cinematic Video (use width/longSide as classification anchor)
+          if (longSide >= 3840) return '2160p';
+          if (longSide >= 2560) return '1440p';
+          if (longSide >= 1920) return '1080p';
+          if (longSide >= 1280) return '720p';
+          if (longSide >= 854) return '480p';
+          if (longSide >= 640) return '360p';
+          if (longSide >= 426) return '240p';
+          return '144p';
+        } else {
+          // Vertical Video (Shorts) (use width/shortSide as classification anchor)
+          if (shortSide >= 2160) return '2160p';
+          if (shortSide >= 1440) return '1440p';
+          if (shortSide >= 1080) return '1080p';
+          if (shortSide >= 720) return '720p';
+          if (shortSide >= 480) return '480p';
+          if (shortSide >= 360) return '360p';
+          if (shortSide >= 240) return '240p';
+          return '144p';
+        }
       };
 
       // Accept formats based on actual height (Requirement 4) and do not discard due to slight differences (Requirement 6)
@@ -365,7 +426,7 @@ app.get('/api/formats', async (req, res) => {
       // Map display labels and collect unique ones
       const heightsSet = new Set();
       videoFormats.forEach(f => {
-        f.label = getLabelForHeight(f.height);
+        f.label = classifyFormatQuality(f);
         if (f.label) heightsSet.add(f.label);
       });
 
@@ -387,7 +448,7 @@ app.get('/api/formats', async (req, res) => {
       });
 
       const rawFormats = formats.map(f => {
-        const label = f.vcodec !== 'none' && f.height ? getLabelForHeight(f.height) : null;
+        const label = f.vcodec !== 'none' ? classifyFormatQuality(f) : null;
         return {
           format_id: f.format_id,
           height: f.height || null,
