@@ -11,6 +11,32 @@ import ffmpegStatic from 'ffmpeg-static';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load local environment variables if .env exists
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  try {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    envContent.split(/\r?\n/).forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx !== -1) {
+        const key = trimmed.substring(0, eqIdx).trim();
+        let val = trimmed.substring(eqIdx + 1).trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1);
+        }
+        if (!process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    });
+    console.log('[Auto-Setup] Loaded local .env variables.');
+  } catch (err) {
+    console.error('[Auto-Setup] Failed to load .env:', err);
+  }
+}
+
 /**
  * Resolves the best ffmpeg binary.
  * Priority: system ffmpeg (via PATH) > ffmpeg-static npm bundle.
@@ -760,32 +786,95 @@ app.delete('/api/settings/cookies', (req, res) => {
   }
 });
 
+// Controlled Telegram monitoring verification endpoint (development-only)
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/api/test-telegram-error', (req, res) => {
+    console.log('[Test Route] Triggering controlled Telegram alert tests...');
+    
+    // 1. Standard test alert
+    sendTelegramAlert(
+      'Test Diagnostic Alert', 
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
+      '1080p', 
+      '137', 
+      'Standard diagnostic error: Operation failed successfully.'
+    );
+
+    // 2. HTTP cookie format sanitization test
+    sendTelegramAlert(
+      'Test HTTP Cookie Sanitization', 
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
+      '1080p', 
+      '137', 
+      'Failed authentication header: Cookie: SID=abcdef123; __Secure-3PSID=xyz789; othercookie=visible;'
+    );
+
+    // 3. Netscape cookie format sanitization test
+    sendTelegramAlert(
+      'Test Netscape Cookie Sanitization', 
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
+      '1080p', 
+      '137', 
+      'Cookie parsing failed on line: .youtube.com\tTRUE\t/\tTRUE\t1745678900\tSID\tsecretcookievalue'
+    );
+
+    // 4. Rate-limiting / Duplicate suppression verification
+    // Send two identical errors. The first should be delivered, the second should be suppressed.
+    sendTelegramAlert(
+      'Test Duplicate Suppression', 
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
+      '1080p', 
+      '137', 
+      'Duplicate error message that should trigger only once: error code 0x9f.'
+    );
+    sendTelegramAlert(
+      'Test Duplicate Suppression', 
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
+      '1080p', 
+      '137', 
+      'Duplicate error message that should trigger only once: error code 0x9f.'
+    );
+
+    res.json({
+      success: true,
+      message: 'Controlled Telegram alerts triggered. Check server console and Telegram chat for results.'
+    });
+  });
+}
+
 // ----------------------------------------------------
 // TELEGRAM AUTOMATIC ERROR REPORTING
 // ----------------------------------------------------
 const errorCache = new Map();
 
 function sendTelegramAlert(stage, url, quality, format_id, errorMessage, jobId = 'N/A') {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  // 1. Sanitize the error message first
+  const rawMsg = errorMessage || 'Unknown error';
+  const sanitized = rawMsg
+    // A. Redact HTTP and Netscape cookies for sensitive YouTube auth keys
+    .replace(/(?:SID|HSID|SSID|APISID|SAPISID|LOGIN_INFO|VISITOR_INFO1_LIVE|YSC|__Secure-[a-zA-Z0-9\-_]+)\b(?:=|\t|\s+)[^\s;\t]+/gi, '[redacted]')
+    // Also redact raw Netscape cookie lines
+    .replace(/^(?:(?!\s).)*youtube\.com\s+[\w]+\s+\/\s+[\w]+\s+\d+\s+(?:SID|HSID|SSID|APISID|SAPISID|LOGIN_INFO|VISITOR_INFO1_LIVE|YSC|__Secure-[a-zA-Z0-9\-_]+)\s+[^\r\n]+/gm, '[redacted_netscape_cookie_line]')
+    // B. Sanitize absolute Windows paths
+    .replace(/[A-Za-z]:\\[\w\s.\-_\\+]+/g, '[path]')
+    // C. Sanitize Unix and absolute paths
+    .replace(/\/[\w.\-_\\+]+/g, '[path]')
+    // D. Sanitize IP addresses
+    .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '[ip]')
+    // E. Sanitize long auth tokens / base64 strings (40+ characters)
+    .replace(/[A-Za-z0-9+/=]{40,}/g, '[redacted]')
+    .substring(0, 500);
 
-  if (!botToken || !chatId) return;
-
-  const hash = `${stage}|${url}|${errorMessage}`;
+  // 2. Generate duplicate cache hash based on SANITIZED payload
+  const hash = `${stage}|${url || 'N/A'}|${sanitized}`;
   const now = Date.now();
   if (errorCache.has(hash)) {
-    if (now - errorCache.get(hash) < 10 * 60 * 1000) return;
+    if (now - errorCache.get(hash) < 10 * 60 * 1000) {
+      console.log(`[Telegram Alert] Duplicate suppressed: stage=${stage}, error=${sanitized}`);
+      return;
+    }
   }
   errorCache.set(hash, now);
-
-  const sanitized = (errorMessage || 'Unknown error')
-    .replace(/[A-Za-z]:\\[\w\s.\-]+/g, '[path]')
-    .replace(/[A-Za-z]:\/[\w\s.\-]+/g, '[path]')
-    .replace(/\/[\w.\-]+/g, '[path]')
-    .replace(/[A-Za-z0-9+/=]{40,}/g, '[redacted]')
-    .replace(/(?:SID|SAPISID|APISID|LOGIN_INFO)=[^;\s]+/gi, '[redacted]')
-    .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '[ip]')
-    .substring(0, 500);
 
   const text = [
     '🚨 CropTube Error', '',
@@ -798,6 +887,16 @@ function sendTelegramAlert(stage, url, quality, format_id, errorMessage, jobId =
     `Format ID: ${format_id || 'N/A'}`,
     '', 'Error:', sanitized
   ].join('\n');
+
+  console.log(`[Telegram Alert Debug] Calculated message payload:\n${text}\n-------------------`);
+
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (!botToken || !chatId) {
+    console.log('[Telegram Alert] Skip api.telegram.org post: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured.');
+    return;
+  }
 
   const payload = JSON.stringify({ chat_id: chatId, text });
   const options = {
