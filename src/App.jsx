@@ -39,22 +39,41 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
   const [seeked, setSeeked] = useState(false);
   const [raw, setRaw] = useState(value);
   const [valid, setValid] = useState(true);
+  const inputRef = useRef(null);
 
-  // Keep raw in sync when parent changes value (e.g. on grab)
-  useEffect(() => { setRaw(value); setValid(true); }, [value]);
+  // Keep raw in sync when parent changes value (e.g. on grab), but only if not focused.
+  // This prevents cursor jumping while the user is actively typing.
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      setRaw(value);
+      setValid(true);
+    }
+  }, [value]);
 
   const handleChange = (e) => {
     const v = e.target.value;
     setRaw(v);
+    
     const norm = normaliseHMS(v);
-    if (norm) { setValid(true); onChange(norm); }
-    else setValid(false);
+    // Normalize and propagate to parent immediately only if it's a complete 8-character timestamp (HH:MM:SS)
+    if (norm && v.length === 8) {
+      setValid(true);
+      onChange(norm);
+    } else {
+      setValid(!!norm);
+    }
   };
 
   const handleBlur = () => {
     const norm = normaliseHMS(raw);
-    if (norm) { setRaw(norm); setValid(true); onChange(norm); }
-    else { setRaw(value); setValid(true); }           // revert on bad input
+    if (norm) {
+      setRaw(norm);
+      setValid(true);
+      onChange(norm);
+    } else {
+      setRaw(value);
+      setValid(true);
+    }
   };
 
   const handleGrab = () => {
@@ -88,6 +107,7 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
       </div>
 
       <input
+        ref={inputRef}
         type="text"
         value={raw}
         onChange={handleChange}
