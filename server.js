@@ -816,6 +816,17 @@ app.get('/api/settings/cookies/check', (req, res) => {
   res.json({ hasGlobalCookies: exists });
 });
 
+app.get('/api/debug/cookies', (req, res) => {
+  res.json({
+    dirname: __dirname,
+    binDir,
+    globalCookiePath,
+    exists: fs.existsSync(globalCookiePath),
+    binContents: fs.existsSync(binDir) ? fs.readdirSync(binDir) : []
+  });
+});
+
+
 // Save global cookies permanently on the server
 app.post('/api/settings/cookies', (req, res) => {
   const { cookies } = req.body;
