@@ -1,3 +1,8 @@
+/* ──────────────────────────────────────────────────────────
+   Google Fonts — Phase 5: Premium Typography
+   ─────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Instrument+Serif:ital@0;1&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,21 +10,42 @@
 @layer base {
   body {
     @apply bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   }
 }
 
-/* Custom style to blend select options with the dark background */
+/* ──────────────────────────────────────────────────────────
+   Typography Utility Classes
+   ─────────────────────────────────────────────────────────── */
+.font-display {
+  font-family: 'Outfit', system-ui, sans-serif;
+}
+.font-body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+.font-serif {
+  font-family: 'Instrument Serif', Georgia, serif;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Select option styling
+   ─────────────────────────────────────────────────────────── */
 select option {
   background-color: #0b1329 !important;
   color: #f1f5f9 !important;
 }
 
-/* Custom Scrollbar */
+/* ──────────────────────────────────────────────────────────
+   Custom Scrollbar
+   ─────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { @apply bg-slate-950; }
-::-webkit-scrollbar-thumb { @apply bg-slate-800 rounded-full hover:bg-slate-700 transition-colors; }
+::-webkit-scrollbar-thumb { @apply bg-slate-800 rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-slate-700; }
 
-/* Neon glows */
+/* ──────────────────────────────────────────────────────────
+   Neon Glows
+   ─────────────────────────────────────────────────────────── */
 .neon-glow-indigo {
   box-shadow: 0 0 20px rgba(99,102,241,0.15), 0 0 40px rgba(99,102,241,0.05);
 }
@@ -32,12 +58,16 @@ select option {
   100% { border-color: rgba(139,92,246,0.6); box-shadow: 0 0 20px rgba(139,92,246,0.2); }
 }
 
-/* Radial backgrounds */
+/* ──────────────────────────────────────────────────────────
+   Radial Glow
+   ─────────────────────────────────────────────────────────── */
 .radial-glow {
   background: radial-gradient(circle at 50% 0%, rgba(99,102,241,0.08) 0%, rgba(0,0,0,0) 70%);
 }
 
-/* Grab-time flash — green border pulse when time is captured from player */
+/* ──────────────────────────────────────────────────────────
+   Grab-time Flash
+   ─────────────────────────────────────────────────────────── */
 @keyframes grabFlash {
   0%   { border-color: rgb(16,185,129);  box-shadow: 0 0 0 3px rgba(16,185,129,0.4); }
   60%  { border-color: rgb(16,185,129);  box-shadow: 0 0 0 7px rgba(16,185,129,0.1); }
@@ -45,7 +75,9 @@ select option {
 }
 .grab-flash { animation: grabFlash 1s ease-out forwards; }
 
-/* Seek pulse — indigo ring when player is seeked to a marker */
+/* ──────────────────────────────────────────────────────────
+   Seek Pulse
+   ─────────────────────────────────────────────────────────── */
 @keyframes seekPulse {
   0%   { box-shadow: 0 0 0 0   rgba(99,102,241,0.55); }
   70%  { box-shadow: 0 0 0 9px rgba(99,102,241,0);    }
@@ -53,38 +85,74 @@ select option {
 }
 .seek-pulse { animation: seekPulse 0.55s ease-out; }
 
-/* Spin slow */
+/* ──────────────────────────────────────────────────────────
+   Spin Slow
+   ─────────────────────────────────────────────────────────── */
 @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .animate-spin-slow { animation: spin-slow 8s linear infinite; }
 
-/* Fiery-glow gradient background to match reference design */
-.fiery-glow {
-  background: radial-gradient(circle at 10% 90%, rgba(239, 68, 68, 0.22) 0%, transparent 45%),
-              radial-gradient(circle at 90% 10%, rgba(99, 102, 241, 0.18) 0%, transparent 55%),
-              radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 60%),
-              #030712;
-}
-
-/* Beautiful serif accent styling */
+/* ──────────────────────────────────────────────────────────
+   Beautiful Serif Accent (legacy compat)
+   ─────────────────────────────────────────────────────────── */
 .font-serif-accent {
   font-family: 'Instrument Serif', 'Playfair Display', Georgia, serif;
 }
 
-/* Premium Glassmorphic style */
+/* ──────────────────────────────────────────────────────────
+   Glass Panel
+   ─────────────────────────────────────────────────────────── */
 .glass-panel {
   background: rgba(11, 17, 34, 0.45) !important;
   backdrop-filter: blur(24px) saturate(160%);
   -webkit-backdrop-filter: blur(24px) saturate(160%);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 
+  box-shadow:
     0 24px 50px -12px rgba(0, 0, 0, 0.5),
     inset 0 1px 1px rgba(255, 255, 255, 0.05);
 }
 
-/* Animated dynamic mesh background */
+/* ──────────────────────────────────────────────────────────
+   Navbar Glass
+   ─────────────────────────────────────────────────────────── */
+.nav-glass {
+  background: rgba(2, 4, 10, 0.7);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+/* ──────────────────────────────────────────────────────────
+   Navbar Link Animated Underline
+   ─────────────────────────────────────────────────────────── */
+.nav-link {
+  position: relative;
+  color: rgba(148,163,184,1);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: color 0.2s ease;
+  padding-bottom: 2px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 1.5px;
+  background: linear-gradient(90deg, #818cf8, #a78bfa);
+  border-radius: 9999px;
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.nav-link:hover { color: rgba(255,255,255,1); }
+.nav-link:hover::after { width: 100%; }
+
+/* ──────────────────────────────────────────────────────────
+   Animated Dynamic Mesh Background
+   ─────────────────────────────────────────────────────────── */
 .dynamic-mesh-bg {
   background-color: #02040a;
-  background-image: 
+  background-image:
     radial-gradient(circle at 20% 30%, rgba(37, 99, 235, 0.22) 0%, transparent 45%),
     radial-gradient(circle at 80% 70%, rgba(128, 0, 32, 0.25) 0%, transparent 50%),
     radial-gradient(circle at 50% 20%, rgba(29, 78, 216, 0.18) 0%, transparent 40%),
@@ -94,45 +162,203 @@ select option {
   animation: meshDrift 20s ease infinite alternate;
 }
 
-
 @keyframes meshDrift {
-  0% {
-    background-position: 0% 0%;
-  }
-  50% {
-    background-position: 100% 100%;
-  }
-  100% {
-    background-position: 0% 100%;
-  }
+  0%   { background-position: 0% 0%; }
+  50%  { background-position: 100% 100%; }
+  100% { background-position: 0% 100%; }
 }
 
-/* Entry Animations */
+/* ──────────────────────────────────────────────────────────
+   Bento Card
+   ─────────────────────────────────────────────────────────── */
+.bento-card {
+  background: rgba(11, 17, 34, 0.55);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 20px;
+  padding: 1.5rem;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: transform 0.25s cubic-bezier(0.4,0,0.2,1),
+              box-shadow 0.25s cubic-bezier(0.4,0,0.2,1),
+              border-color 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+.bento-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 0% 0%, rgba(99,102,241,0.06) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.bento-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -12px rgba(99,102,241,0.25), 0 0 0 1px rgba(99,102,241,0.15);
+  border-color: rgba(99,102,241,0.25);
+}
+.bento-card:hover::before {
+  opacity: 1;
+}
+
+/* ──────────────────────────────────────────────────────────
+   FAQ Accordion
+   ─────────────────────────────────────────────────────────── */
+.faq-item {
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px;
+  background: rgba(11, 17, 34, 0.4);
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+.faq-item.open {
+  border-color: rgba(99,102,241,0.2);
+}
+.faq-answer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1);
+}
+.faq-answer.open {
+  max-height: 300px;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Hero Input
+   ─────────────────────────────────────────────────────────── */
+.hero-input-wrap {
+  background: rgba(11,17,34,0.6);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 16px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.hero-input-wrap:focus-within {
+  border-color: rgba(99,102,241,0.5);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.08);
+}
+
+/* ──────────────────────────────────────────────────────────
+   CTA Gradient Button
+   ─────────────────────────────────────────────────────────── */
+.cta-btn {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 0.85rem 2rem;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+  box-shadow: 0 8px 24px -6px rgba(99,102,241,0.5);
+  position: relative;
+  overflow: hidden;
+}
+.cta-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0);
+  transition: background 0.2s ease;
+}
+.cta-btn:hover {
+  transform: translateY(-2px) scale(1.015);
+  box-shadow: 0 14px 32px -6px rgba(99,102,241,0.65);
+  filter: brightness(1.08);
+}
+.cta-btn:active {
+  transform: translateY(0) scale(0.99);
+}
+.cta-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Quick-start chip
+   ─────────────────────────────────────────────────────────── */
+.qs-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  color: rgba(148,163,184,1);
+  font-size: 0.75rem;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.qs-chip:hover {
+  background: rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.3);
+  color: #fff;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Timeline connector
+   ─────────────────────────────────────────────────────────── */
+.timeline-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(99,102,241,0.3), rgba(139,92,246,0.3));
+}
+
+/* ──────────────────────────────────────────────────────────
+   Entry Animations
+   ─────────────────────────────────────────────────────────── */
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
 .animate-fade-in-up {
   opacity: 0;
-  animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeInUp 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.animation-delay-100 {
-  animation-delay: 100ms;
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-fade-in {
+  opacity: 0;
+  animation: fadeIn 0.6s ease forwards;
 }
 
-.animation-delay-200 {
-  animation-delay: 200ms;
+.animation-delay-100 { animation-delay: 80ms; }
+.animation-delay-200 { animation-delay: 160ms; }
+.animation-delay-300 { animation-delay: 260ms; }
+.animation-delay-400 { animation-delay: 360ms; }
+.animation-delay-500 { animation-delay: 460ms; }
+.animation-delay-600 { animation-delay: 560ms; }
+
+/* ──────────────────────────────────────────────────────────
+   Section heading gradient
+   ─────────────────────────────────────────────────────────── */
+.section-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  background: linear-gradient(135deg, #f1f5f9 30%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.animation-delay-300 {
-  animation-delay: 300ms;
+/* Fiery glow */
+.fiery-glow {
+  background: radial-gradient(circle at 10% 90%, rgba(239, 68, 68, 0.22) 0%, transparent 45%),
+              radial-gradient(circle at 90% 10%, rgba(99, 102, 241, 0.18) 0%, transparent 55%),
+              radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 60%),
+              #030712;
 }
-

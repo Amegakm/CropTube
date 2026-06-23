@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Scissors, Play, Download, AlertCircle, CheckCircle2,
-  Loader2, Crosshair, Trash2, Search
+  Loader2, Crosshair, Trash2, Search, ChevronDown, Menu, X,
+  Zap, Shield, Wifi, Clock, Ban, Music
 } from 'lucide-react';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -21,7 +22,6 @@ function hmsToSecs(hms) {
   return parts[0] * 3600 + parts[1] * 60 + parts[2];
 }
 
-// Validates and normalises a raw string → HH:MM:SS (returns null if invalid)
 function normaliseHMS(raw) {
   const cleaned = raw.replace(/[^\d:]/g, '');
   const parts = cleaned.split(':');
@@ -32,7 +32,11 @@ function normaliseHMS(raw) {
   return [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
 }
 
-// ─── TimeMarker: single HH:MM:SS input with Grab + Seek buttons ─────────────
+function isYouTubeUrl(str) {
+  return /(?:youtu\.be\/|[?&]v=|shorts\/|embed\/)([A-Za-z0-9_-]{11})/.test(str) || str.startsWith('http');
+}
+
+// ─── TimeMarker ──────────────────────────────────────────────────────────────
 
 function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, playerReady }) {
   const [grabbed, setGrabbed] = useState(false);
@@ -41,8 +45,6 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
   const [valid, setValid] = useState(true);
   const inputRef = useRef(null);
 
-  // Keep raw in sync when parent changes value (e.g. on grab), but only if not focused.
-  // This prevents cursor jumping while the user is actively typing.
   useEffect(() => {
     if (document.activeElement !== inputRef.current) {
       setRaw(value);
@@ -53,9 +55,7 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
   const handleChange = (e) => {
     const v = e.target.value;
     setRaw(v);
-    
     const norm = normaliseHMS(v);
-    // Normalize and propagate to parent immediately only if it's a complete 8-character timestamp (HH:MM:SS)
     if (norm && v.length === 8) {
       setValid(true);
       onChange(norm);
@@ -150,6 +150,447 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
   );
 }
 
+// ─── FAQ Accordion Item ───────────────────────────────────────────────────────
+
+function FAQItem({ question, answer, isOpen, onToggle }) {
+  return (
+    <div className={`faq-item ${isOpen ? 'open' : ''}`}>
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-5 py-4 text-left"
+      >
+        <span className="font-body font-600 text-sm text-slate-200 pr-4">{question}</span>
+        <ChevronDown
+          className="w-4 h-4 text-indigo-400 flex-shrink-0 transition-transform duration-300"
+          style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+        />
+      </button>
+      <div className={`faq-answer ${isOpen ? 'open' : ''}`}>
+        <p className="px-5 pb-4 text-sm text-slate-400 leading-relaxed font-body">{answer}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Landing Page ─────────────────────────────────────────────────────────────
+
+function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openFaq, setOpenFaq] = useState(null);
+  const inputRef = useRef(null);
+
+  const quickStarts = [
+    { label: '🎵 Music clip', value: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+    { label: '🎮 Gaming highlight', value: 'Minecraft speedrun world record' },
+    { label: '📰 News segment', value: 'SpaceX rocket launch 2024' },
+    { label: '🎤 Interview snippet', value: 'https://www.youtube.com/watch?v=JN3KPFbWCy8' },
+  ];
+
+  const bentoFeatures = [
+    {
+      icon: <Zap className="w-6 h-6 text-yellow-400" />,
+      title: 'No-Bloat Slicing',
+      desc: 'Surgically extract only the segment you need. Zero overhead from unnecessary frames.',
+      color: 'rgba(234,179,8,0.08)',
+      border: 'rgba(234,179,8,0.15)',
+    },
+    {
+      icon: <Shield className="w-6 h-6 text-emerald-400" />,
+      title: 'Zero Quality Loss',
+      desc: 'Stream-copy codec pipeline preserves every pixel. No re-encoding artifacts, ever.',
+      color: 'rgba(52,211,153,0.08)',
+      border: 'rgba(52,211,153,0.15)',
+    },
+    {
+      icon: <Shield className="w-6 h-6 text-amber-400" />,
+      title: 'Cloud Auth Support',
+      desc: 'Netscape-format cookie injection bypasses datacenter IP blocks. Fully server-side.',
+      color: 'rgba(251,146,60,0.08)',
+      border: 'rgba(251,146,60,0.15)',
+    },
+    {
+      icon: <Wifi className="w-6 h-6 text-indigo-400" />,
+      title: 'Real-Time SSE Logs',
+      desc: 'Live extraction progress via Server-Sent Events. Watch your clip materialise in real time.',
+      color: 'rgba(99,102,241,0.08)',
+      border: 'rgba(99,102,241,0.15)',
+    },
+    {
+      icon: <Ban className="w-6 h-6 text-rose-400" />,
+      title: 'No Full Downloads',
+      desc: 'yt-dlp downloads only the exact byte range. Cloud bandwidth stays minimal.',
+      color: 'rgba(244,63,94,0.08)',
+      border: 'rgba(244,63,94,0.15)',
+    },
+    {
+      icon: <Music className="w-6 h-6 text-violet-400" />,
+      title: 'Audio Re-Sync & FFmpeg',
+      desc: 'FFmpeg post-processes audio alignment and container merging for seamless playback.',
+      color: 'rgba(167,139,250,0.08)',
+      border: 'rgba(167,139,250,0.15)',
+    },
+  ];
+
+  const faqItems = [
+    {
+      question: 'How does surgical slicing work?',
+      answer: 'CropTube uses yt-dlp with a --download-sections flag to fetch only the byte range corresponding to your chosen timestamps directly from YouTube\'s CDN. FFmpeg then copies the stream into the final container without re-encoding — preserving original quality.'
+    },
+    {
+      question: 'Why are YouTube cookies needed?',
+      answer: 'YouTube\'s servers actively block requests originating from datacenter IP ranges. Uploading your browser\'s session cookies in Netscape format allows CropTube\'s cloud node to authenticate as your browser and bypass those blocks.'
+    },
+    {
+      question: 'Does CropTube download the full video?',
+      answer: 'No. CropTube instructs yt-dlp to stream only the byte range you specify. If your clip is 30 seconds of a 2-hour video, only those 30 seconds of data traverse the network.'
+    },
+    {
+      question: 'Are 4K clips supported?',
+      answer: 'Yes. CropTube dynamically fetches available resolutions from the video\'s manifest, including 2160p (4K) and 1440p (2K). You can choose the exact quality tier before extracting.'
+    },
+    {
+      question: 'How are clips processed and delivered?',
+      answer: 'Clips are processed in-memory on the cloud server and streamed directly to your browser via a download link. Files are purged from the server immediately after your download completes — nothing is stored.'
+    },
+  ];
+
+  const handleCTA = () => {
+    if (heroUrl.trim()) onEnterDashboard();
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && heroUrl.trim()) onEnterDashboard();
+  };
+
+  const navLinks = [
+    { label: 'About', modal: 'about' },
+    { label: 'How It Works', id: 'how-it-works' },
+    { label: 'Services', modal: 'services' },
+    { label: 'FAQ', id: 'faq' },
+  ];
+
+  const scrollTo = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setMobileMenuOpen(false);
+  };
+
+  return (
+    <div className="min-h-screen w-full dynamic-mesh-bg font-body text-slate-200 overflow-x-hidden">
+
+      {/* ── NAVBAR ──────────────────────────────────────────────── */}
+      <nav className="nav-glass sticky top-0 z-50 w-full">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-14">
+
+            {/* Logo */}
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center neon-glow-indigo">
+                <Scissors className="w-3.5 h-3.5 text-white" />
+              </div>
+              <span className="font-display font-800 text-[15px] tracking-tight text-white">
+                Crop<span className="text-indigo-400">Tube</span>
+              </span>
+            </div>
+
+            {/* Desktop links */}
+            <div className="hidden md:flex items-center gap-7">
+              {navLinks.map(l => (
+                l.modal
+                  ? <button key={l.label} onClick={() => setActiveModal(l.modal)} className="nav-link">{l.label}</button>
+                  : <button key={l.label} onClick={() => scrollTo(l.id)} className="nav-link">{l.label}</button>
+              ))}
+            </div>
+
+            {/* Docs button + mobile toggle */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setActiveModal('docs')}
+                className="hidden md:flex items-center gap-1.5 px-4 py-1.5 border border-white/10 hover:border-indigo-500/40 hover:bg-indigo-500/10
+                  rounded-full text-[12px] font-semibold text-slate-300 hover:text-white transition-all"
+              >
+                Docs &amp; Guide ↗
+              </button>
+              <button
+                className="md:hidden w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white"
+                onClick={() => setMobileMenuOpen(v => !v)}
+                aria-label="Toggle menu"
+              >
+                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile menu */}
+          {mobileMenuOpen && (
+            <div className="md:hidden pb-4 pt-2 space-y-1 border-t border-white/5 animate-fade-in">
+              {navLinks.map(l => (
+                l.modal
+                  ? <button key={l.label} onClick={() => { setActiveModal(l.modal); setMobileMenuOpen(false); }}
+                      className="block w-full text-left px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors">
+                      {l.label}
+                    </button>
+                  : <button key={l.label} onClick={() => scrollTo(l.id)}
+                      className="block w-full text-left px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors">
+                      {l.label}
+                    </button>
+              ))}
+              <button onClick={() => { setActiveModal('docs'); setMobileMenuOpen(false); }}
+                className="block w-full text-left px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors">
+                Docs &amp; Guide ↗
+              </button>
+            </div>
+          )}
+        </div>
+      </nav>
+
+      {/* ── HERO ────────────────────────────────────────────────── */}
+      <section className="relative px-4 sm:px-6 lg:px-8 pt-20 pb-24 max-w-4xl mx-auto text-center">
+        {/* Glow ring behind headline */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-8 left-1/2 -translate-x-1/2 w-[520px] h-[320px] rounded-full opacity-20"
+          style={{ background: 'radial-gradient(ellipse at center, rgba(99,102,241,0.5) 0%, transparent 70%)' }}
+        />
+
+        {/* Badge */}
+        <div className="animate-fade-in inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-indigo-500/25
+          bg-indigo-500/10 text-indigo-300 text-[11px] font-semibold tracking-wide mb-7">
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+          Cloud Extraction · No Full Downloads · 4K Supported
+        </div>
+
+        {/* Headline */}
+        <h1 className="font-display animate-fade-in-up animation-delay-100
+          text-4xl sm:text-5xl lg:text-[3.6rem] font-extrabold tracking-tight leading-[1.12] text-white mb-5">
+          Surgical{' '}
+          <span className="font-serif italic text-indigo-300">YouTube</span>
+          <br />Clip Extraction
+        </h1>
+
+        {/* Sub-headline */}
+        <p className="animate-fade-in-up animation-delay-200 text-slate-400 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto mb-10">
+          Extract high-fidelity clips without downloading entire videos.
+          Zero quality loss, cloud-based, and instantly ready to download.
+        </p>
+
+        {/* Hero input + CTA */}
+        <div className="animate-fade-in-up animation-delay-300 max-w-xl mx-auto space-y-3">
+          <div className="hero-input-wrap flex items-center gap-2 px-4 py-3">
+            <Search className="w-4 h-4 text-slate-500 flex-shrink-0" />
+            <input
+              ref={inputRef}
+              id="hero-url-input"
+              type="text"
+              value={heroUrl}
+              onChange={e => setHeroUrl(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Paste YouTube URL or type search keywords…"
+              className="flex-1 bg-transparent outline-none text-sm text-slate-200 placeholder-slate-600 min-w-0"
+            />
+            {heroUrl && (
+              <button onClick={() => setHeroUrl('')} className="text-slate-600 hover:text-rose-400 transition-colors flex-shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          <button
+            id="hero-cta-btn"
+            onClick={handleCTA}
+            disabled={!heroUrl.trim()}
+            className="cta-btn w-full flex items-center justify-center gap-2"
+          >
+            <Scissors className="w-4 h-4" />
+            Start Slicing
+          </button>
+        </div>
+
+        {/* Quick-start chips */}
+        <div className="animate-fade-in-up animation-delay-400 flex flex-wrap justify-center gap-2 mt-7">
+          <span className="text-[11px] text-slate-600 self-center mr-1">Try:</span>
+          {quickStarts.map(qs => (
+            <button
+              key={qs.value}
+              className="qs-chip"
+              onClick={() => {
+                setHeroUrl(qs.value);
+                inputRef.current?.focus();
+              }}
+            >
+              {qs.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* ── BENTO FEATURE GRID ────────────────────────────────── */}
+      <section className="px-4 sm:px-6 lg:px-8 py-20 max-w-6xl mx-auto">
+        <div className="text-center mb-12">
+          <h2 className="section-title text-3xl sm:text-4xl mb-3">Built Different</h2>
+          <p className="text-slate-500 text-sm max-w-xl mx-auto">
+            Every feature designed around one principle — extract exactly what you need, nothing more.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {bentoFeatures.map((f, i) => (
+            <div
+              key={f.title}
+              className={`bento-card animate-fade-in-up`}
+              style={{
+                animationDelay: `${i * 80}ms`,
+                '--card-bg': f.color,
+                '--card-border': f.border,
+              }}
+            >
+              <div
+                className="w-11 h-11 rounded-xl flex items-center justify-center mb-4"
+                style={{ background: f.color, border: `1px solid ${f.border}` }}
+              >
+                {f.icon}
+              </div>
+              <h3 className="font-display font-700 text-[15px] text-white mb-2">{f.title}</h3>
+              <p className="text-slate-500 text-[13px] leading-relaxed">{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── HOW IT WORKS ─────────────────────────────────────── */}
+      <section id="how-it-works" className="px-4 sm:px-6 lg:px-8 py-20 max-w-5xl mx-auto">
+        <div className="text-center mb-14">
+          <h2 className="section-title text-3xl sm:text-4xl mb-3">How It Works</h2>
+          <p className="text-slate-500 text-sm max-w-md mx-auto">
+            Three steps from URL to clip. No logins, no installs.
+          </p>
+        </div>
+
+        {/* Desktop: horizontal timeline */}
+        <div className="hidden md:flex items-start gap-0">
+          {[
+            {
+              step: '01',
+              title: 'Paste URL',
+              desc: 'Drop a YouTube link into the hero input or search by keyword.',
+              color: '#6366f1',
+            },
+            {
+              step: '02',
+              title: 'Select Range',
+              desc: 'Use the video player to grab precise start and end timestamps.',
+              color: '#8b5cf6',
+            },
+            {
+              step: '03',
+              title: 'Download Clip',
+              desc: 'Hit Extract & Download. Your clip arrives in seconds.',
+              color: '#a78bfa',
+            },
+          ].map((s, i, arr) => (
+            <React.Fragment key={s.step}>
+              <div className="flex flex-col items-center text-center flex-1 px-4">
+                <div
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-display font-800 text-[13px] mb-5 shadow-lg"
+                  style={{ background: `linear-gradient(135deg, ${s.color}cc, ${s.color}88)`, boxShadow: `0 8px 24px -6px ${s.color}55` }}
+                >
+                  {s.step}
+                </div>
+                <h3 className="font-display font-700 text-white text-[16px] mb-2">{s.title}</h3>
+                <p className="text-slate-500 text-[13px] leading-relaxed max-w-[200px]">{s.desc}</p>
+              </div>
+              {i < arr.length - 1 && (
+                <div className="timeline-line mt-6 mx-2" />
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+
+        {/* Mobile: vertical timeline */}
+        <div className="md:hidden space-y-6 relative pl-6">
+          <div className="absolute left-5 top-0 bottom-0 w-px bg-gradient-to-b from-indigo-500/40 via-violet-500/30 to-transparent" />
+          {[
+            { step: '01', title: 'Paste URL', desc: 'Drop a YouTube link or search by keyword.', color: '#6366f1' },
+            { step: '02', title: 'Select Range', desc: 'Grab precise start and end timestamps from the player.', color: '#8b5cf6' },
+            { step: '03', title: 'Download Clip', desc: 'Hit Extract & Download. Clip arrives in seconds.', color: '#a78bfa' },
+          ].map(s => (
+            <div key={s.step} className="flex items-start gap-4 relative">
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-display font-700 text-xs flex-shrink-0 -ml-6 relative z-10"
+                style={{ background: `linear-gradient(135deg, ${s.color}cc, ${s.color}88)`, boxShadow: `0 4px 16px -4px ${s.color}55` }}
+              >
+                {s.step}
+              </div>
+              <div className="pt-1">
+                <h3 className="font-display font-700 text-white text-sm mb-1">{s.title}</h3>
+                <p className="text-slate-500 text-[13px] leading-relaxed">{s.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── FAQ ──────────────────────────────────────────────── */}
+      <section id="faq" className="px-4 sm:px-6 lg:px-8 py-20 max-w-2xl mx-auto">
+        <div className="text-center mb-12">
+          <h2 className="section-title text-3xl sm:text-4xl mb-3">Frequently Asked</h2>
+          <p className="text-slate-500 text-sm">Straight answers to real questions.</p>
+        </div>
+        <div className="space-y-2.5">
+          {[
+            {
+              question: 'How does surgical slicing work?',
+              answer: 'CropTube uses yt-dlp with a --download-sections flag to fetch only the byte range corresponding to your chosen timestamps directly from YouTube\'s CDN. FFmpeg then copies the stream into the final container without re-encoding — preserving original quality.'
+            },
+            {
+              question: 'Why are YouTube cookies needed?',
+              answer: 'YouTube\'s servers actively block requests originating from datacenter IP ranges. Uploading your browser\'s session cookies in Netscape format allows CropTube\'s cloud node to authenticate as your browser and bypass those blocks.'
+            },
+            {
+              question: 'Does CropTube download the full video?',
+              answer: 'No. CropTube instructs yt-dlp to stream only the byte range you specify. If your clip is 30 seconds of a 2-hour video, only those 30 seconds of data traverse the network.'
+            },
+            {
+              question: 'Are 4K clips supported?',
+              answer: 'Yes. CropTube dynamically fetches available resolutions from the video\'s manifest, including 2160p (4K) and 1440p (2K). You can choose the exact quality tier before extracting.'
+            },
+            {
+              question: 'How are clips processed and delivered?',
+              answer: 'Clips are processed in-memory on the cloud server and streamed directly to your browser via a download link. Files are purged from the server immediately after your download completes — nothing is stored.'
+            },
+          ].map((item, i) => (
+            <FAQItem
+              key={i}
+              question={item.question}
+              answer={item.answer}
+              isOpen={openFaq === i}
+              onToggle={() => setOpenFaq(openFaq === i ? null : i)}
+            />
+          ))}
+        </div>
+      </section>
+
+      {/* ── FOOTER ──────────────────────────────────────────── */}
+      <footer className="border-t border-white/5 px-4 sm:px-6 lg:px-8 py-10 max-w-7xl mx-auto">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-[11px] text-slate-600">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center">
+              <Scissors className="w-2.5 h-2.5 text-white" />
+            </div>
+            <span className="font-display font-600 text-slate-400">CropTube</span>
+            <span>· © {new Date().getFullYear()} All rights reserved.</span>
+          </div>
+          <div className="flex flex-wrap justify-center gap-4 sm:gap-5">
+            <button onClick={() => setActiveModal('privacy')} className="hover:text-white transition-colors">Privacy Policy</button>
+            <button onClick={() => setActiveModal('terms')} className="hover:text-white transition-colors">Terms of Service</button>
+            <button onClick={() => setActiveModal('about')} className="hover:text-white transition-colors">About</button>
+            <button onClick={() => setActiveModal('docs')} className="hover:text-white transition-colors">Docs</button>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
 // ─── Main App ────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -184,9 +625,20 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [showDashboard, setShowDashboard] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
+  // Hero URL state — shared with LandingPage so it pre-populates the dashboard input
+  const [heroUrl, setHeroUrl] = useState('');
 
   const playerRef = useRef(null);
   const ytApiReady = useRef(false);
+
+  // ── Enter dashboard from hero ─────────────────────────────────────────────
+  const handleEnterDashboard = useCallback(() => {
+    if (heroUrl.trim()) {
+      setYoutubeUrl(heroUrl.trim());
+    }
+    setShowDashboard(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [heroUrl]);
 
   const handleSearch = () => {
     if (isSearching) return;
@@ -195,10 +647,7 @@ export default function App() {
       setSearchResults([]);
       return;
     }
-    const isUrl = /(?:youtu\.be\/|[?&]v=|shorts\/|embed\/)([A-Za-z0-9_-]{11})/.test(trimmed) || trimmed.startsWith('http');
-    if (isUrl) {
-      return; // Do NOT run search for URLs
-    }
+    if (isYouTubeUrl(trimmed)) return;
     setIsSearching(true);
     setErrorMsg('');
     fetch(`/api/search?q=${encodeURIComponent(trimmed)}`)
@@ -208,25 +657,16 @@ export default function App() {
       })
       .then(data => {
         setSearchResults(data.entries || []);
-        if ((data.entries || []).length === 0) {
-          setErrorMsg('No results found.');
-        }
+        if ((data.entries || []).length === 0) setErrorMsg('No results found.');
       })
-      .catch(err => {
-        setErrorMsg('Failed to fetch search results.');
-      })
-      .finally(() => {
-        setIsSearching(false);
-      });
+      .catch(() => { setErrorMsg('Failed to fetch search results.'); })
+      .finally(() => { setIsSearching(false); });
   };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       const trimmed = youtubeUrl.trim();
-      const isUrl = /(?:youtu\.be\/|[?&]v=|shorts\/|embed\/)([A-Za-z0-9_-]{11})/.test(trimmed) || trimmed.startsWith('http');
-      if (!isUrl) {
-        handleSearch();
-      }
+      if (!isYouTubeUrl(trimmed)) handleSearch();
     }
   };
 
@@ -240,7 +680,6 @@ export default function App() {
       .then(d => setHasGlobalCookies(d.hasGlobalCookies))
       .catch(() => { });
   }, []);
-
 
   // ── Parse YouTube video ID from URL ──────────────────────────────────────
   useEffect(() => {
@@ -268,7 +707,6 @@ export default function App() {
   useEffect(() => {
     if (ytApiReady.current) return;
     ytApiReady.current = true;
-
     if (!window.YT) {
       const script = document.createElement('script');
       script.src = 'https://www.youtube.com/iframe_api';
@@ -279,17 +717,13 @@ export default function App() {
   // ── Create / replace YouTube player when videoId changes ─────────────────
   useEffect(() => {
     if (!videoId) { setPlayerReady(false); return; }
-
     setPlayerReady(false);
 
     const initPlayer = () => {
-      // Destroy old player if exists
       if (playerRef.current && typeof playerRef.current.destroy === 'function') {
         try { playerRef.current.destroy(); } catch (_) { }
         playerRef.current = null;
       }
-
-      // Recreate mount div (player API replaces the element)
       const container = document.getElementById('yt-player-wrap');
       if (!container) return;
       container.innerHTML = '';
@@ -342,31 +776,19 @@ export default function App() {
       .then(async r => {
         const isJson = r.headers.get('content-type')?.includes('application/json');
         const data = isJson ? await r.json() : null;
-        if (!r.ok) {
-          throw new Error(data?.error || `Failed to fetch format metadata (${r.status})`);
-        }
+        if (!r.ok) throw new Error(data?.error || `Failed to fetch format metadata (${r.status})`);
         return data;
       })
       .then(data => {
-        if (data.rawFormats) {
-          setRawFormats(data.rawFormats);
-        } else {
-          setRawFormats([]);
-        }
+        if (data.rawFormats) setRawFormats(data.rawFormats);
+        else setRawFormats([]);
 
-        if (data.videoFormats && data.videoFormats.length > 0) {
-          setAvailableVideoFormats(data.videoFormats);
-        }
-        if (data.audioFormats && data.audioFormats.length > 0) {
-          setAvailableAudioFormats(data.audioFormats);
-        }
-        if (data.heights && data.heights.length > 0) {
-          setAvailableResolutions(data.heights);
-        }
+        if (data.videoFormats && data.videoFormats.length > 0) setAvailableVideoFormats(data.videoFormats);
+        if (data.audioFormats && data.audioFormats.length > 0) setAvailableAudioFormats(data.audioFormats);
+        if (data.heights && data.heights.length > 0) setAvailableResolutions(data.heights);
 
         const defaultVideo = data.videoFormats && data.videoFormats.includes('mp4') ? 'mp4' : (data.videoFormats?.[0] || 'mp4');
         setSelectedFormat(defaultVideo);
-
         const defaultQual = data.heights && data.heights.includes('1080p') ? '1080p' : (data.heights?.[0] || '1080p');
         setSelectedQuality(defaultQual);
       })
@@ -377,9 +799,7 @@ export default function App() {
         setAvailableResolutions([]);
         setRawFormats([]);
       })
-      .finally(() => {
-        setIsLoadingFormats(false);
-      });
+      .finally(() => { setIsLoadingFormats(false); });
   }, [videoId, hasGlobalCookies]);
 
   // ── Resolve exact yt-dlp format_id reactively ──────────────────────────────
@@ -403,12 +823,10 @@ export default function App() {
     } else {
       const targetHeight = parseInt(selectedQuality) || 1080;
       const matchingHeight = rawFormats.filter(f => (f.label === selectedQuality || f.height === targetHeight) && f.vcodec !== 'none');
-      
-      const containerMatch = matchingHeight.find(f => f.ext === selectedFormat) || 
+      const containerMatch = matchingHeight.find(f => f.ext === selectedFormat) ||
                             matchingHeight[0] ||
                             rawFormats.find(f => f.label === selectedQuality || f.height === targetHeight) ||
                             rawFormats.find(f => f.vcodec !== 'none');
-                            
       const resolvedId = containerMatch ? containerMatch.format_id : 'none';
       setSelectedFormatId(resolvedId);
       console.log(`[Format Resolution] Resolved selectedFormatId (video): ${resolvedId}, targetHeight: ${targetHeight}, matchingHeight count: ${matchingHeight.length}`);
@@ -462,9 +880,7 @@ export default function App() {
       .catch(() => { });
   };
 
-
-
-  // ── Extract clip ────────────────────────────────────────────────────────────────────────────────
+  // ── Extract clip ─────────────────────────────────────────────────────────
   const handleExtract = () => {
     if (!videoId) return;
     const s = hmsToSecs(startTime), e = hmsToSecs(endTime);
@@ -483,7 +899,6 @@ export default function App() {
     setExtractionComplete(false);
     setLastError('');
 
-    // Step 1: Initiate job
     const payload = {
       url: youtubeUrl,
       start: startTime,
@@ -495,7 +910,6 @@ export default function App() {
     };
 
     console.log(`[Initiate Payload Log] Sending payload:`, JSON.stringify(payload, null, 2));
-
 
     fetch('/api/extract/initiate', {
       method: 'POST',
@@ -514,14 +928,11 @@ export default function App() {
         const es = new EventSource(`/api/extract/stream?fileId=${fileId}`);
         let isCompleted = false;
 
-        es.onopen = () => {
-          console.log('[Frontend SSE] connected');
-        };
+        es.onopen = () => { console.log('[Frontend SSE] connected'); };
 
         es.onmessage = (evt) => {
           try {
             const data = JSON.parse(evt.data);
-
             if (data.type === 'status') {
               setStatusMessage(data.message);
             } else if (data.type === 'progress') {
@@ -572,15 +983,12 @@ export default function App() {
           link.href = `/api/download/${fileId}`;
           link.download = `CropTube_Clip_${fileId}.${dlExt}`;
           document.body.appendChild(link);
-
-          // Short delay to let browser process click before cleanup
           setTimeout(() => {
             console.log('[Frontend SSE] download triggered');
             link.click();
             document.body.removeChild(link);
           }, 100);
 
-          // Delay SSE close and state reset so the download request reaches the server first
           setTimeout(() => {
             setExtracting(false);
             setCurrentStep(0);
@@ -591,11 +999,7 @@ export default function App() {
 
         es.onerror = () => {
           console.log('[Frontend SSE] onerror triggered');
-          if (isCompleted) {
-            es.close();
-            console.log('[Frontend SSE] eventsource closed');
-            return;
-          }
+          if (isCompleted) { es.close(); console.log('[Frontend SSE] eventsource closed'); return; }
           setExtractionFailed(true);
           setLastError('Connection lost. The clip may still be processing on the server.');
           setStatusMessage('');
@@ -655,16 +1059,16 @@ export default function App() {
     if (!data) return null;
 
     return (
-      <div 
+      <div
         onClick={() => setActiveModal(null)}
         className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md cursor-pointer"
       >
-        <div 
+        <div
           onClick={(e) => e.stopPropagation()}
           className="w-full max-w-md glass-panel p-6 rounded-[24px] space-y-4 relative animate-fade-in-up border border-white/10 shadow-2xl cursor-default"
         >
           <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
-            <h3 className="font-bold text-sm text-white tracking-tight">{data.title}</h3>
+            <h3 className="font-display font-bold text-sm text-white tracking-tight">{data.title}</h3>
             <button
               onClick={() => setActiveModal(null)}
               className="text-white/40 hover:text-white transition-colors text-xs font-bold w-6 h-6 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center"
@@ -688,71 +1092,24 @@ export default function App() {
     );
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // ── LANDING PAGE ─────────────────────────────────────────────────────────
   if (!showDashboard) {
     return (
-      <div className="min-h-screen w-full dynamic-mesh-bg flex items-center justify-center p-4 sm:p-6 md:p-8 lg:p-10 font-sans antialiased text-slate-200">
+      <>
         {renderModal()}
-        <div className="w-full max-w-2xl lg:max-w-[1400px] lg:aspect-[16/10] min-h-[90vh] lg:min-h-0 glass-panel rounded-[32px] p-6 sm:p-10 flex flex-col justify-between overflow-hidden relative">
-          {/* Subtle top decoration */}
-          <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-black/40 to-transparent pointer-events-none" />
-
-          {/* Header Navigation */}
-          <div className="flex flex-col xs:flex-row gap-3 xs:gap-0 justify-between items-center text-xs text-white/50 z-10 animate-fade-in-up">
-            <span className="font-bold tracking-widest text-[10px] text-white">CROPTUBE</span>
-            <div className="flex gap-4 sm:gap-6 text-[10px] sm:text-xs">
-              <span onClick={() => setActiveModal('about')} className="hover:text-white cursor-pointer transition-colors">About</span>
-              <span onClick={() => setActiveModal('works')} className="hover:text-white cursor-pointer transition-colors">Works</span>
-              <span onClick={() => setActiveModal('services')} className="hover:text-white cursor-pointer transition-colors">Services</span>
-            </div>
-            <button 
-              onClick={() => setActiveModal('docs')}
-              className="px-3 py-1 sm:px-3.5 sm:py-1.5 border border-white/10 hover:border-white/30 hover:bg-white/5 rounded-full transition-all text-[9px] sm:text-[10px] font-medium text-white flex items-center gap-1"
-            >
-              Docs &amp; Guide ↗
-            </button>
-          </div>
-
-          {/* Central Pitch */}
-          <div className="space-y-6 text-center my-auto z-10">
-            <h2 className="text-4xl sm:text-5.5xl text-white font-semibold font-sans tracking-tight leading-[1.15] animate-fade-in-up animation-delay-100">
-              The tool that makes your <br />
-              <span className="italic font-serif-accent text-indigo-300 text-5xl sm:text-6xl">videos &amp; clips</span> surgical
-            </h2>
-
-            <p className="text-xs sm:text-sm text-white/50 text-center max-w-md mx-auto leading-relaxed animate-fade-in-up animation-delay-200">
-              Extract high-quality segments from YouTube instantly. No full file downloads, no bandwidth waste, just code-clean slicing.
-            </p>
-
-            <div className="animate-fade-in-up animation-delay-300 flex justify-center">
-              <button
-                onClick={() => setShowDashboard(true)}
-                className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white text-xs px-6 py-3.5 rounded-full transition-all shadow-md active:scale-[0.98]"
-              >
-                <Play className="w-3.5 h-3.5 fill-white text-white" />
-                See How It Works
-              </button>
-            </div>
-          </div>
-
-          {/* Footer Grid */}
-          <div className="w-full border-t border-white/5 pt-4 flex flex-col sm:flex-row justify-between items-center gap-2 text-[10px] text-white/30 z-10 animate-fade-in-up animation-delay-300">
-            <div>
-              &copy; {new Date().getFullYear()} CropTube. All rights reserved.
-            </div>
-            <div className="flex gap-4">
-              <button onClick={() => setActiveModal('privacy')} className="hover:text-white transition-colors">Privacy Policy</button>
-              <button onClick={() => setActiveModal('terms')} className="hover:text-white transition-colors">Terms of Service</button>
-              <button onClick={() => setActiveModal('about')} className="hover:text-white transition-colors">About Us</button>
-            </div>
-          </div>
-        </div>
-      </div>
+        <LandingPage
+          onEnterDashboard={handleEnterDashboard}
+          setActiveModal={setActiveModal}
+          heroUrl={heroUrl}
+          setHeroUrl={setHeroUrl}
+        />
+      </>
     );
   }
 
+  // ── DASHBOARD ────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen w-full dynamic-mesh-bg flex items-center justify-center p-2 sm:p-6 md:p-8 font-sans antialiased text-slate-200">
+    <div className="min-h-screen w-full dynamic-mesh-bg flex items-center justify-center p-2 sm:p-6 md:p-8 font-body antialiased text-slate-200">
       {renderModal()}
       <div className="w-full max-w-2xl lg:max-w-[1480px] glass-panel rounded-[24px] sm:rounded-[32px] p-4 sm:p-8 space-y-6 relative overflow-hidden">
 
@@ -773,7 +1130,7 @@ export default function App() {
               <Scissors className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h1 className="font-extrabold text-base sm:text-lg tracking-tight text-white font-sans">
+              <h1 className="font-display font-extrabold text-base sm:text-lg tracking-tight text-white">
                 Crop<span className="text-indigo-400">Tube</span>
               </h1>
               <p className="text-[8px] sm:text-[9px] text-slate-500 uppercase tracking-widest font-semibold">Surgical Extractor</p>
@@ -800,10 +1157,10 @@ export default function App() {
 
         {/* Main Layout Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
-          
+
           {/* Left Column: Auth, URL, Preview (7/12 cols on desktop) */}
           <div className="lg:col-span-7 space-y-6">
-            
+
             {/* 1. YOUTUBE AUTH COOKIES */}
             <div className="space-y-2">
               <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">1. YouTube Auth Cookies</label>
@@ -974,7 +1331,7 @@ export default function App() {
           {/* Right Column: Slicing Range, Formats, Action Button, History (5/12 cols on desktop) */}
           <div className="lg:col-span-5 space-y-6 flex flex-col justify-between">
             <div className="space-y-6">
-              
+
               {/* 4. RANGE SELECTION */}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">4. Range Selection</label>
@@ -1024,7 +1381,7 @@ export default function App() {
 
               {/* 5. FORMAT & QUALITY */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">5. Format & Quality</label>
+                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">5. Format &amp; Quality</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Format</span>
@@ -1097,7 +1454,6 @@ export default function App() {
                 <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">6. Download</label>
                 {(extracting || extractionFailed || extractionComplete) ? (
                   <div className="w-full bg-slate-900/50 border border-slate-800 rounded-xl p-3.5 space-y-2.5 shadow-inner">
-                    {/* Status header */}
                     <div className="flex justify-between items-center text-xs">
                       <div className="flex items-center gap-2 font-semibold">
                         {extracting ? (
@@ -1136,7 +1492,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Progress bar */}
                     <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden relative border border-slate-900">
                       <div
                         className={`h-full rounded-full transition-all duration-300 ease-out relative ${
@@ -1150,13 +1505,11 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Time progress */}
                     <div className="flex justify-between text-[9px] text-slate-500 font-mono">
                       <span>Processed: {secsToHMS(Math.round((progress / 100) * clipLen))}</span>
                       <span>Target: {secsToHMS(clipLen)}</span>
                     </div>
 
-                    {/* Human-readable error message */}
                     {extractionFailed && lastError && (
                       <div className="bg-rose-950/20 border border-rose-900/40 rounded-lg p-2.5 text-[10px] text-rose-300 leading-relaxed">
                         {lastError}
@@ -1226,4 +1579,3 @@ export default function App() {
     </div>
   );
 }
-
