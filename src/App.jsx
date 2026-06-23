@@ -180,12 +180,8 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
   const [openFaq, setOpenFaq] = useState(null);
   const inputRef = useRef(null);
 
-  const quickStarts = [
-    { label: '🎵 Music clip', value: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
-    { label: '🎮 Gaming highlight', value: 'Minecraft speedrun world record' },
-    { label: '📰 News segment', value: 'SpaceX rocket launch 2024' },
-    { label: '🎤 Interview snippet', value: 'https://www.youtube.com/watch?v=JN3KPFbWCy8' },
-  ];
+
+
 
   const bentoFeatures = [
     {
@@ -281,7 +277,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
       {/* ── NAVBAR ──────────────────────────────────────────────── */}
       <nav className="nav-glass sticky top-0 z-50 w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14">
+          <div className="flex items-center justify-between h-12 sm:h-14">
 
             {/* Logo */}
             <div className="flex items-center gap-2.5">
@@ -345,7 +341,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
       </nav>
 
       {/* ── HERO ────────────────────────────────────────────────── */}
-      <section className="relative px-4 sm:px-6 lg:px-8 pt-20 pb-24 max-w-4xl mx-auto text-center">
+      <section className="relative px-4 sm:px-6 lg:px-8 pt-10 sm:pt-16 pb-8 sm:pb-16 max-w-4xl mx-auto text-center">
         {/* Glow ring behind headline */}
         <div
           aria-hidden="true"
@@ -355,28 +351,27 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
 
         {/* Badge */}
         <div className="animate-fade-in inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-indigo-500/25
-          bg-indigo-500/10 text-indigo-300 text-[11px] font-semibold tracking-wide mb-7">
+          bg-indigo-500/10 text-indigo-300 text-[11px] font-semibold tracking-wide mb-5 sm:mb-7">
           <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
           Cloud Extraction · No Full Downloads · 4K Supported
         </div>
 
         {/* Headline */}
         <h1 className="font-display animate-fade-in-up animation-delay-100
-          text-4xl sm:text-5xl lg:text-[3.6rem] font-extrabold tracking-tight leading-[1.12] text-white mb-5">
+          text-[2rem] sm:text-5xl lg:text-[3.6rem] font-extrabold tracking-tight leading-[1.1] text-white mb-3 sm:mb-5">
           Surgical{' '}
           <span className="font-serif italic text-indigo-300">YouTube</span>
           <br />Clip Extraction
         </h1>
 
         {/* Sub-headline */}
-        <p className="animate-fade-in-up animation-delay-200 text-slate-400 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto mb-10">
-          Extract high-fidelity clips without downloading entire videos.
-          Zero quality loss, cloud-based, and instantly ready to download.
+        <p className="animate-fade-in-up animation-delay-200 text-slate-400 text-sm sm:text-lg leading-snug sm:leading-relaxed max-w-2xl mx-auto mb-6 sm:mb-10">
+          Extract clips instantly. No full downloads. Zero quality loss. Up to 4K.
         </p>
 
         {/* Hero input + CTA */}
-        <div className="animate-fade-in-up animation-delay-300 max-w-xl mx-auto space-y-3">
-          <div className="hero-input-wrap flex items-center gap-2 px-4 py-3">
+        <div className="animate-fade-in-up animation-delay-300 max-w-xl mx-auto space-y-2.5">
+          <div className="hero-input-wrap flex items-center gap-2 px-4 py-2.5 sm:py-3">
             <Search className="w-4 h-4 text-slate-500 flex-shrink-0" />
             <input
               ref={inputRef}
@@ -385,7 +380,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
               value={heroUrl}
               onChange={e => setHeroUrl(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Paste YouTube URL or type search keywords…"
+              placeholder="Paste YouTube URL or search…"
               className="flex-1 bg-transparent outline-none text-sm text-slate-200 placeholder-slate-600 min-w-0"
             />
             {heroUrl && (
@@ -404,28 +399,21 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
             <Scissors className="w-4 h-4" />
             Start Slicing
           </button>
+
+          {/* Trust chips */}
+          <div className="flex flex-wrap justify-center gap-1.5 pt-1">
+            {['⬆ Up to 4K', '📱 Shorts Support', '⚡ No Full Downloads', '🔴 Real-Time Processing'].map(chip => (
+              <span key={chip} className="text-[10px] text-slate-500 px-2.5 py-1 rounded-full border border-white/6 bg-white/2">
+                {chip}
+              </span>
+            ))}
+          </div>
         </div>
 
-        {/* Quick-start chips */}
-        <div className="animate-fade-in-up animation-delay-400 flex flex-wrap justify-center gap-2 mt-7">
-          <span className="text-[11px] text-slate-600 self-center mr-1">Try:</span>
-          {quickStarts.map(qs => (
-            <button
-              key={qs.value}
-              className="qs-chip"
-              onClick={() => {
-                setHeroUrl(qs.value);
-                inputRef.current?.focus();
-              }}
-            >
-              {qs.label}
-            </button>
-          ))}
-        </div>
       </section>
 
       {/* ── BENTO FEATURE GRID ────────────────────────────────── */}
-      <section className="px-4 sm:px-6 lg:px-8 py-20 max-w-6xl mx-auto">
+      <section className="px-4 sm:px-6 lg:px-8 pt-8 sm:pt-14 pb-20 max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <h2 className="section-title text-3xl sm:text-4xl mb-3">Built Different</h2>
           <p className="text-slate-500 text-sm max-w-xl mx-auto">
