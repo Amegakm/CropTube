@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Scissors, Play, Download, AlertCircle, CheckCircle2,
   Loader2, Crosshair, Trash2, Search, ChevronDown, Menu, X,
-  Zap, Shield, Wifi, Clock, Ban, Music
+  Zap, Shield, Wifi, Clock, Ban, Music,
+  Info, BookOpen, Briefcase, FileText, Lock, ChevronRight, Star
 } from 'lucide-react';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -625,11 +626,28 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [showDashboard, setShowDashboard] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
+  const [isModalClosing, setIsModalClosing] = useState(false);
   // Hero URL state — shared with LandingPage so it pre-populates the dashboard input
   const [heroUrl, setHeroUrl] = useState('');
 
   const playerRef = useRef(null);
   const ytApiReady = useRef(false);
+
+  // ── Close modal with exit animation ──────────────────────────────────────
+  const closeModal = useCallback(() => {
+    setIsModalClosing(true);
+    setTimeout(() => {
+      setActiveModal(null);
+      setIsModalClosing(false);
+    }, 220);
+  }, []);
+
+  // ── ESC key closes modal ──────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape' && activeModal) closeModal(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [activeModal, closeModal]);
 
   // ── Enter dashboard from hero ─────────────────────────────────────────────
   const handleEnterDashboard = useCallback(() => {
@@ -1028,63 +1046,206 @@ export default function App() {
   const renderModal = () => {
     if (!activeModal) return null;
 
-    const modalData = {
-      about: {
-        title: 'About CropTube',
-        content: 'CropTube is a premium open-source tool built to extract high-quality clips and formats from YouTube links without downloading entire video streams. It uses advanced backend technology with yt-dlp and FFmpeg to slice segments on-demand, saving bandwidth and local storage.'
-      },
-      works: {
-        title: 'How It Works',
-        content: '1. Paste a valid YouTube URL.\n2. Load the preview stream.\n3. Adjust the Start and End markers using playhead time grabs.\n4. Choose your format (MP4, MKV, MP3, M4A) and dynamic resolution.\n5. Click Extract & Download to receive your high-quality file instantly.'
-      },
-      services: {
-        title: 'Services & API',
-        content: 'CropTube provides cloud extraction nodes, high-bandwidth processing servers, Netscape cookie support for premium links, and developer APIs to integrate video slicing directly into media pipelines.'
-      },
-      docs: {
-        title: 'Developer Guide',
-        content: 'Access CLI features, API specs, deployment scripts, and yt-dlp configurations. Learn how to configure local proxies and Netscape cookie authentication to optimize extraction speeds across different network topologies.'
-      },
-      privacy: {
-        title: 'Privacy Policy',
-        content: 'CropTube respects user privacy. We do not store downloaded videos or track user inputs. Sliced video files are stored in temporary memory on the server and are purged immediately after the download completes.'
-      },
-      terms: {
-        title: 'Terms of Service',
-        content: 'This tool is intended for personal and educational use. Users are responsible for complying with the terms of service of the video platform they are downloading content from. We do not host or distribute copy-protected material.'
-      }
+    const closing = isModalClosing;
+
+    // ── MODAL CONTENT VARIANTS ──────────────────────────────────────────────
+    const ModalAbout = () => (
+      <>
+        {/* Icon + title */}
+        <div className="flex items-start gap-4 mb-6">
+          <div className="modal-icon-badge" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 8px 24px -6px rgba(99,102,241,0.45)' }}>
+            <Scissors className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="font-display text-xl font-800 text-white tracking-tight">About CropTube</h3>
+            <p className="text-xs text-indigo-400 mt-0.5 font-medium">Surgical YouTube clip extraction</p>
+          </div>
+        </div>
+
+        {/* Feature badges */}
+        <div className="flex flex-wrap gap-2 mb-5">
+          {['Open Source','4K Supported','Zero Storage','Cloud Auth','SSE Logs','FFmpeg Pipeline'].map(tag => (
+            <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border border-indigo-500/20 bg-indigo-500/8 text-indigo-300">
+              <Star className="w-2.5 h-2.5" />{tag}
+            </span>
+          ))}
+        </div>
+
+        <p className="text-sm text-slate-400 leading-relaxed mb-5">
+          CropTube is a premium open-source tool built to extract high-quality clips from YouTube without downloading entire video streams. Powered by <span className="text-slate-300 font-medium">yt-dlp</span> and <span className="text-slate-300 font-medium">FFmpeg</span>, it slices only the exact byte range you need — saving bandwidth and storage.
+        </p>
+
+        <div className="grid grid-cols-3 gap-3">
+          {[{ label: 'Format Support', value: 'MP4 · MKV · MP3 · M4A' }, { label: 'Max Resolution', value: '4K (2160p)' }, { label: 'Clip Delivery', value: 'Instant download' }].map(s => (
+            <div key={s.label} className="bg-white/3 border border-white/5 rounded-xl p-3 text-center">
+              <div className="text-white font-display font-700 text-xs mb-1">{s.value}</div>
+              <div className="text-slate-600 text-[10px]">{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+
+    const ModalWorks = () => (
+      <>
+        <div className="flex items-start gap-4 mb-6">
+          <div className="modal-icon-badge" style={{ background: 'linear-gradient(135deg,#0ea5e9,#6366f1)', boxShadow: '0 8px 24px -6px rgba(14,165,233,0.35)' }}>
+            <Play className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="font-display text-xl font-800 text-white tracking-tight">How It Works</h3>
+            <p className="text-xs text-sky-400 mt-0.5 font-medium">Five steps from URL to clip</p>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {[
+            { n: '01', title: 'Paste a YouTube URL', desc: 'Drop any standard youtube.com/watch, youtu.be share, or Shorts link into the input.' },
+            { n: '02', title: 'Load the Preview', desc: 'The embedded player streams the video so you can review it without downloading.' },
+            { n: '03', title: 'Set Start & End Markers', desc: 'Hit Grab to capture the current playhead time, then seek to the end point and grab again.' },
+            { n: '04', title: 'Choose Format & Quality', desc: 'Pick container (MP4, MKV, MP3, M4A) and resolution up to 4K — options are dynamically fetched.' },
+            { n: '05', title: 'Extract & Download', desc: 'One click kicks off a cloud extraction job. Your clip downloads automatically when ready.' },
+          ].map(step => (
+            <div key={step.n} className="flex gap-3 items-start">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white font-display font-700 text-[10px] flex-shrink-0 mt-0.5">{step.n}</div>
+              <div>
+                <p className="text-sm font-semibold text-slate-200 mb-0.5">{step.title}</p>
+                <p className="text-xs text-slate-500 leading-relaxed">{step.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+
+    const ModalServices = () => (
+      <>
+        <div className="flex items-start gap-4 mb-6">
+          <div className="modal-icon-badge" style={{ background: 'linear-gradient(135deg,#f59e0b,#ef4444)', boxShadow: '0 8px 24px -6px rgba(245,158,11,0.35)' }}>
+            <Briefcase className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="font-display text-xl font-800 text-white tracking-tight">Services &amp; API</h3>
+            <p className="text-xs text-amber-400 mt-0.5 font-medium">Cloud infrastructure for video extraction</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[
+            { icon: <Zap className="w-4 h-4 text-yellow-400" />, title: 'Cloud Extraction', desc: 'Scalable cloud nodes run yt-dlp extraction jobs on demand with dedicated bandwidth.' },
+            { icon: <Shield className="w-4 h-4 text-emerald-400" />, title: 'Cookie Auth', desc: 'Netscape-format cookie injection to bypass datacenter IP restrictions on YouTube.' },
+            { icon: <Wifi className="w-4 h-4 text-indigo-400" />, title: 'SSE Pipeline', desc: 'Real-time progress events streamed to your browser via Server-Sent Events.' },
+            { icon: <BookOpen className="w-4 h-4 text-violet-400" />, title: 'Developer API', desc: 'REST endpoints for search, format detection, clip initiation, and download delivery.' },
+          ].map(s => (
+            <div key={s.title} className="modal-service-card">
+              <div className="flex items-center gap-2 mb-2">{s.icon}<span className="text-xs font-bold text-slate-200 font-display">{s.title}</span></div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">{s.desc}</p>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+
+    const ModalDocs = () => (
+      <>
+        <div className="flex items-start gap-4 mb-6">
+          <div className="modal-icon-badge" style={{ background: 'linear-gradient(135deg,#10b981,#0ea5e9)', boxShadow: '0 8px 24px -6px rgba(16,185,129,0.35)' }}>
+            <BookOpen className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="font-display text-xl font-800 text-white tracking-tight">Docs &amp; Guide</h3>
+            <p className="text-xs text-emerald-400 mt-0.5 font-medium">Integration, configuration, and API reference</p>
+          </div>
+        </div>
+        <div className="space-y-4">
+          {[
+            { label: 'Getting Started', title: 'Quick Setup', body: 'Paste any YouTube URL into the hero input. No account or install required. For cloud deployments, register Netscape cookies to bypass datacenter IP blocks.' },
+            { label: 'Cookie Auth', title: 'Netscape Cookie Format', body: 'Export using the "Get cookies.txt LOCALLY" Chrome extension. Paste the raw text into the Settings panel and click Register on Server to activate cloud-side auth.' },
+            { label: 'API Reference', title: 'REST Endpoints', body: 'POST /api/extract/initiate · GET /api/extract/stream (SSE) · GET /api/download/:fileId · GET /api/formats · GET /api/search · POST /api/settings/cookies' },
+            { label: 'yt-dlp Config', title: 'Extraction Pipeline', body: '--download-sections clips only the specified byte range. FFmpeg stream-copies the result with -c copy to avoid re-encoding quality loss.' },
+          ].map(section => (
+            <div key={section.label}>
+              <p className="doc-label">{section.label}</p>
+              <p className="text-xs font-semibold text-slate-300 mb-1">{section.title}</p>
+              <p className="text-[11px] text-slate-500 leading-relaxed font-mono bg-white/2 border border-white/5 rounded-lg px-3 py-2">{section.body}</p>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+
+    const ModalLegal = ({ type }) => {
+      const isPrivacy = type === 'privacy';
+      const sections = isPrivacy ? [
+        { heading: 'Data Collection', body: 'CropTube does not collect, store, or transmit personal data. No accounts, no tracking, no analytics beyond standard server logs.' },
+        { heading: 'Video Storage', body: 'Extracted clips are held in temporary server memory only for the duration of your download. Files are purged immediately after delivery completes.' },
+        { heading: 'Cookies & Auth', body: 'YouTube session cookies you register are stored server-side solely to authenticate yt-dlp requests on your behalf. They are never logged, shared, or used for any other purpose.' },
+        { heading: 'Third-Party Services', body: 'CropTube interacts with YouTube CDN and optionally Telegram for server-side error alerts. No user-identifiable data is included in those interactions.' },
+      ] : [
+        { heading: 'Permitted Use', body: 'CropTube is intended for personal, educational, and research use only. Users must comply with YouTube\'s Terms of Service and applicable copyright law.' },
+        { heading: 'Prohibited Use', body: 'You may not use CropTube to download, redistribute, or monetise copyright-protected content without the rights holder\'s explicit permission.' },
+        { heading: 'No Warranty', body: 'This service is provided as-is without warranty of any kind. We are not liable for outages, extraction failures, or changes in YouTube\'s API behaviour.' },
+        { heading: 'Service Changes', body: 'We reserve the right to modify or discontinue the service at any time without notice. Continued use constitutes acceptance of any updated terms.' },
+      ];
+      return (
+        <>
+          <div className="flex items-start gap-4 mb-5">
+            <div className="modal-icon-badge" style={{ background: isPrivacy ? 'linear-gradient(135deg,#6366f1,#06b6d4)' : 'linear-gradient(135deg,#f43f5e,#fb923c)', boxShadow: isPrivacy ? '0 8px 24px -6px rgba(99,102,241,0.35)' : '0 8px 24px -6px rgba(244,63,94,0.35)' }}>
+              {isPrivacy ? <Lock className="w-5 h-5 text-white" /> : <FileText className="w-5 h-5 text-white" />}
+            </div>
+            <div>
+              <h3 className="font-display text-xl font-800 text-white tracking-tight">{isPrivacy ? 'Privacy Policy' : 'Terms of Service'}</h3>
+              <p className="text-[11px] mt-0.5" style={{ color: isPrivacy ? '#67e8f9' : '#fda4af' }}>Last updated June {new Date().getFullYear()}</p>
+            </div>
+          </div>
+          <div className="space-y-0.5">
+            {sections.map(s => (
+              <div key={s.heading}>
+                <p className="legal-heading">{s.heading}</p>
+                <p className="text-[12px] text-slate-400 leading-relaxed">{s.body}</p>
+              </div>
+            ))}
+          </div>
+        </>
+      );
     };
 
-    const data = modalData[activeModal];
-    if (!data) return null;
+    const contentMap = {
+      about:    <ModalAbout />,
+      works:    <ModalWorks />,
+      services: <ModalServices />,
+      docs:     <ModalDocs />,
+      privacy:  <ModalLegal type="privacy" />,
+      terms:    <ModalLegal type="terms" />,
+    };
+
+    const content = contentMap[activeModal];
+    if (!content) return null;
 
     return (
       <div
-        onClick={() => setActiveModal(null)}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md cursor-pointer"
+        onClick={closeModal}
+        className={`fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 cursor-pointer
+          bg-black/65 backdrop-blur-sm
+          ${closing ? 'modal-backdrop-exit' : 'modal-backdrop-enter'}`}
       >
         <div
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-md glass-panel p-6 rounded-[24px] space-y-4 relative animate-fade-in-up border border-white/10 shadow-2xl cursor-default"
+          className={`modal-content-box w-full max-w-lg cursor-default relative
+            ${closing ? 'modal-panel-exit' : 'modal-panel-enter'}`}
         >
-          <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
-            <h3 className="font-display font-bold text-sm text-white tracking-tight">{data.title}</h3>
-            <button
-              onClick={() => setActiveModal(null)}
-              className="text-white/40 hover:text-white transition-colors text-xs font-bold w-6 h-6 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center"
-            >
-              ✕
-            </button>
+          {/* Scrollable body */}
+          <div className="max-h-[82vh] overflow-y-auto p-6 sm:p-8">
+            {content}
           </div>
-          <div className="text-xs text-white/70 leading-relaxed whitespace-pre-line">
-            {data.content}
-          </div>
-          <div className="pt-2 flex justify-end">
+
+          {/* Footer bar */}
+          <div className="border-t border-white/5 px-6 sm:px-8 py-4 flex items-center justify-between">
+            <span className="text-[10px] text-slate-600 font-mono">ESC to close</span>
             <button
-              onClick={() => setActiveModal(null)}
-              className="px-4 py-1.5 bg-white text-slate-950 hover:bg-slate-100 font-semibold text-[10px] rounded-full transition-all"
+              onClick={closeModal}
+              className="flex items-center gap-1.5 px-4 py-2 bg-white/6 hover:bg-white/10 border border-white/8 hover:border-white/15
+                text-white/80 hover:text-white text-xs font-semibold rounded-xl transition-all"
             >
-              Close
+              <X className="w-3.5 h-3.5" /> Close
             </button>
           </div>
         </div>
