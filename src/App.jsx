@@ -3,7 +3,7 @@ import {
   Scissors, Play, Download, AlertCircle, CheckCircle2,
   Loader2, Crosshair, Trash2, Search, ChevronDown, Menu, X,
   Zap, Shield, Wifi, Clock, Ban, Music,
-  Info, BookOpen, Briefcase, FileText, Lock, ChevronRight, Star
+  Info, BookOpen, Briefcase, FileText, Lock, ChevronRight, Star, RefreshCw
 } from 'lucide-react';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -35,6 +35,42 @@ function normaliseHMS(raw) {
 
 function isYouTubeUrl(str) {
   return /(?:youtu\.be\/|[?&]v=|shorts\/|embed\/)([A-Za-z0-9_-]{11})/.test(str) || str.startsWith('http');
+}
+
+function estimateOutputSize(quality, format, durationSecs) {
+  if (isNaN(durationSecs) || durationSecs <= 0) return '0 MB';
+  const isAudio = format === 'mp3' || format === 'm4a' || format === 'opus' || format === 'webm-audio';
+  let bitrateBps = 0;
+  
+  if (isAudio) {
+    if (quality.includes('320')) bitrateBps = 320000;
+    else if (quality.includes('256')) bitrateBps = 256000;
+    else if (quality.includes('192')) bitrateBps = 192000;
+    else if (quality.includes('128')) bitrateBps = 128000;
+    else bitrateBps = 192000;
+  } else {
+    const qLower = quality.toLowerCase();
+    if (qLower.includes('2160p') || qLower.includes('4k')) bitrateBps = 20000000;
+    else if (qLower.includes('1440p') || qLower.includes('2k')) bitrateBps = 10000000;
+    else if (qLower.includes('1080p')) bitrateBps = 4500000;
+    else if (qLower.includes('720p')) bitrateBps = 2500000;
+    else if (qLower.includes('480p')) bitrateBps = 1000000;
+    else if (qLower.includes('360p')) bitrateBps = 500000;
+    else bitrateBps = 2000000;
+  }
+  
+  const sizeBytes = (bitrateBps * durationSecs) / 8;
+  const sizeMB = sizeBytes / (1024 * 1024);
+  
+  if (sizeMB < 0.1) return '~0.1 MB';
+  
+  const minEstimate = Math.max(0.1, sizeMB * 0.85);
+  const maxEstimate = sizeMB * 1.15;
+  
+  if (sizeMB < 1) {
+    return `~${sizeMB.toFixed(1)} MB`;
+  }
+  return `~${Math.round(minEstimate)}–${Math.round(maxEstimate)} MB`;
 }
 
 // ─── TimeMarker ──────────────────────────────────────────────────────────────
@@ -606,7 +642,17 @@ export default function App() {
   const [extractionFailed, setExtractionFailed] = useState(false);
   const [extractionComplete, setExtractionComplete] = useState(false);
   const [lastError, setLastError] = useState('');
-  const [clipsHistory, setClipsHistory] = useState([]);
+  const [videoTitle, setVideoTitle] = useState('');
+  const [jobHistory, setJobHistory] = useState(() => {
+    try {
+      const stored = localStorage.getItem('croptube_job_history');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      console.error('Failed to load job history from localStorage:', e);
+      return [];
+    }
+  });
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
   const [selectedFormat, setSelectedFormat] = useState('mp4');
@@ -630,8 +676,15 @@ export default function App() {
   // Hero URL state — shared with LandingPage so it pre-populates the dashboard input
   const [heroUrl, setHeroUrl] = useState('');
 
+  const [logs, setLogs] = useState([]);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
+  const [retryPayload, setRetryPayload] = useState(null);
+  const [extractedFileId, setExtractedFileId] = useState('');
+
   const playerRef = useRef(null);
   const ytApiReady = useRef(false);
+  const terminalEndRef = useRef(null);
 
   // ── Close modal with exit animation ──────────────────────────────────────
   const closeModal = useCallback(() => {
@@ -648,6 +701,13 @@ export default function App() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [activeModal, closeModal]);
+
+  // ── Auto-scroll logs window ───────────────────────────────────────────────
+  useEffect(() => {
+    if (autoScroll && terminalEndRef.current) {
+      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs, autoScroll]);
 
   // ── Enter dashboard from hero ─────────────────────────────────────────────
   const handleEnterDashboard = useCallback(() => {
@@ -690,6 +750,15 @@ export default function App() {
 
   // Persist cookies
   useEffect(() => { localStorage.setItem('croptube_cookies', cookies); }, [cookies]);
+
+  // Persist job history to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('croptube_job_history', JSON.stringify(jobHistory));
+    } catch (e) {
+      console.error('Failed to save job history to localStorage:', e);
+    }
+  }, [jobHistory]);
 
   // Check server cookies on mount
   useEffect(() => {
@@ -760,6 +829,12 @@ export default function App() {
             setStartTime('00:00:00');
             setEndTime(secsToHMS(dur));
             setPlayerReady(true);
+            try {
+              const data = e.target.getVideoData();
+              if (data && data.title) {
+                setVideoTitle(data.title);
+              }
+            } catch (_) {}
           },
           onError: () => {
             setErrorMsg('Could not embed this video — the publisher may have restricted embedding.');
@@ -798,6 +873,9 @@ export default function App() {
         return data;
       })
       .then(data => {
+        if (data.title) setVideoTitle(data.title);
+        else setVideoTitle('YouTube Video');
+
         if (data.rawFormats) setRawFormats(data.rawFormats);
         else setRawFormats([]);
 
@@ -898,12 +976,56 @@ export default function App() {
       .catch(() => { });
   };
 
+  // ── History recovery handlers ─────────────────────────────────────────────
+  const handleReloadSettings = (item) => {
+    if (!item) return;
+    setYoutubeUrl(item.url);
+    setVideoId(item.videoId);
+    setVideoTitle(item.title);
+    setStartTime(item.start);
+    setEndTime(item.end);
+    setSelectedQuality(item.quality);
+    setSelectedFormat(item.format);
+    
+    setSearchResults([]);
+    setErrorMsg('');
+    setExtractionComplete(false);
+    setExtractionFailed(false);
+    setLogs([]);
+    setProgress(0);
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleRemoveHistoryItem = (id) => {
+    if (confirm('Are you sure you want to remove this extraction from history?')) {
+      setJobHistory(prev => prev.filter(item => item.id !== id));
+    }
+  };
+
+  const handleClearAllHistory = () => {
+    if (confirm('Are you sure you want to clear your entire extraction history? This cannot be undone.')) {
+      setJobHistory([]);
+    }
+  };
+
   // ── Extract clip ─────────────────────────────────────────────────────────
-  const handleExtract = () => {
+  const handleExtract = (customPayload = null) => {
     if (!videoId) return;
-    const s = hmsToSecs(startTime), e = hmsToSecs(endTime);
+    const targetPayload = customPayload || {
+      url: youtubeUrl,
+      start: startTime,
+      end: endTime,
+      format: selectedFormat,
+      quality: selectedQuality,
+      format_id: selectedFormatId,
+      cookies: cookies
+    };
+
+    const s = hmsToSecs(targetPayload.start);
+    const e = hmsToSecs(targetPayload.end);
     if (e <= s) { setErrorMsg('End time must be after start time.'); return; }
-    if (duration > 0 && e > duration) {
+    if (!customPayload && duration > 0 && e > duration) {
       setErrorMsg(`End time exceeds video duration (${secsToHMS(duration)}).`);
       return;
     }
@@ -916,23 +1038,20 @@ export default function App() {
     setExtractionFailed(false);
     setExtractionComplete(false);
     setLastError('');
+    setRetryPayload(targetPayload);
 
-    const payload = {
-      url: youtubeUrl,
-      start: startTime,
-      end: endTime,
-      format: selectedFormat,
-      quality: selectedQuality,
-      format_id: selectedFormatId,
-      cookies: cookies
-    };
+    setLogs([
+      { text: `[system] Initiating extraction job for video: ${videoId}`, type: 'system' },
+      { text: `[system] Selected range: ${targetPayload.start} - ${targetPayload.end} (${secsToHMS(e - s)})`, type: 'system' },
+      { text: `[system] Target quality: ${targetPayload.quality} (${targetPayload.format.toUpperCase()})`, type: 'system' }
+    ]);
 
-    console.log(`[Initiate Payload Log] Sending payload:`, JSON.stringify(payload, null, 2));
+    console.log(`[Initiate Payload Log] Sending payload:`, JSON.stringify(targetPayload, null, 2));
 
     fetch('/api/extract/initiate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(targetPayload)
     })
       .then(async r => {
         const text = await r.text();
@@ -943,21 +1062,27 @@ export default function App() {
       })
       .then(({ fileId }) => {
         setCurrentStep(2);
+        setLogs(prev => [...prev, { text: `[system] Job initiated. File ID: ${fileId}. Connecting to SSE logs stream...`, type: 'system' }]);
         const es = new EventSource(`/api/extract/stream?fileId=${fileId}`);
         let isCompleted = false;
 
-        es.onopen = () => { console.log('[Frontend SSE] connected'); };
+        es.onopen = () => {
+          console.log('[Frontend SSE] connected');
+          setLogs(prev => [...prev, { text: `[system] SSE Stream connected. Slicing in progress...`, type: 'system' }]);
+        };
 
         es.onmessage = (evt) => {
           try {
             const data = JSON.parse(evt.data);
             if (data.type === 'status') {
               setStatusMessage(data.message);
+              setLogs(prev => [...prev, { text: `[info] ${data.message}`, type: 'info' }]);
             } else if (data.type === 'progress') {
               console.log('[Frontend SSE] progress update');
               const { stage, pct } = data.message;
               setStatusMessage(stage);
               setProgress(pct);
+              setLogs(prev => [...prev, { text: `[info] ${stage} (${pct.toFixed(1)}%)`, type: 'info' }]);
             } else if (data.type === 'cookie_error') {
               setCookiesExpired(true);
               setShowCookies(true);
@@ -969,6 +1094,7 @@ export default function App() {
               setCurrentStep(0);
               es.close();
               console.log('[Frontend SSE] eventsource closed');
+              setLogs(prev => [...prev, { text: `[error] Authentication error: ${data.message}`, type: 'error' }]);
             } else if (data.type === 'error') {
               setExtractionFailed(true);
               setLastError(data.message);
@@ -977,6 +1103,7 @@ export default function App() {
               setCurrentStep(0);
               es.close();
               console.log('[Frontend SSE] eventsource closed');
+              setLogs(prev => [...prev, { text: `[error] Technical error: ${data.message}`, type: 'error' }]);
             }
           } catch (_) { }
         };
@@ -984,19 +1111,33 @@ export default function App() {
         es.addEventListener('completed', (evt) => {
           console.log('[Frontend SSE] completed event received');
           isCompleted = true;
+          setExtractedFileId(fileId);
           setExtractionComplete(true);
           setExtractionFailed(false);
           setLastError('');
           setProgress(100);
           setStatusMessage('Download ready.');
+          setLogs(prev => [...prev, { text: `[success] Clip extraction completed successfully!`, type: 'success' }]);
 
-          setClipsHistory(p => [{
-            id: fileId, title: `Clip (${startTime} – ${endTime})`,
-            url: youtubeUrl, videoId, start: startTime, end: endTime,
-            duration: secsToHMS(e - s), timestamp: new Date().toLocaleTimeString()
-          }, ...p]);
+          setJobHistory(prev => {
+            const newEntry = {
+              id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              title: videoTitle || playerRef.current?.getVideoData()?.title || 'YouTube Video',
+              url: targetPayload.url,
+              videoId: videoId,
+              thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+              start: targetPayload.start,
+              end: targetPayload.end,
+              quality: targetPayload.quality,
+              format: targetPayload.format,
+              timestamp: Date.now(),
+              duration: secsToHMS(e - s)
+            };
+            const filtered = prev.filter(item => item.id !== fileId);
+            return [newEntry, ...filtered].slice(0, 20);
+          });
 
-          const dlExt = selectedFormat === 'webm-audio' ? 'webm' : (selectedFormat === 'mp3' ? 'mp3' : selectedFormat);
+          const dlExt = targetPayload.format === 'webm-audio' ? 'webm' : (targetPayload.format === 'mp3' ? 'mp3' : targetPayload.format);
           const link = document.createElement('a');
           link.href = `/api/download/${fileId}`;
           link.download = `CropTube_Clip_${fileId}.${dlExt}`;
@@ -1025,6 +1166,7 @@ export default function App() {
           setCurrentStep(0);
           es.close();
           console.log('[Frontend SSE] eventsource closed');
+          setLogs(prev => [...prev, { text: `[error] Connection lost.`, type: 'error' }]);
         };
       })
       .catch(err => {
@@ -1033,6 +1175,7 @@ export default function App() {
         setStatusMessage('');
         setExtracting(false);
         setCurrentStep(0);
+        setLogs(prev => [...prev, { text: `[error] Fetch initiation failed: ${err.message || err}`, type: 'error' }]);
       });
   };
 
@@ -1436,6 +1579,7 @@ export default function App() {
                       key={video.id}
                       onClick={() => {
                         setYoutubeUrl(video.url);
+                        setVideoTitle(video.title);
                         setSearchResults([]);
                       }}
                       className="w-full text-left p-2.5 hover:bg-slate-900 flex items-center gap-2.5 transition-colors text-[11px] text-slate-300"
@@ -1490,7 +1634,7 @@ export default function App() {
           </div>
 
           {/* Right Column: Slicing Range, Formats, Action Button, History (5/12 cols on desktop) */}
-          <div className="lg:col-span-5 space-y-6 flex flex-col justify-between">
+          <div className="lg:col-span-5 space-y-6">
             <div className="space-y-6">
 
               {/* 4. RANGE SELECTION */}
@@ -1608,78 +1752,220 @@ export default function App() {
                     </select>
                   </div>
                 </div>
+                {videoId && clipLen > 0 && (
+                  <div className="text-[10px] text-slate-400 mt-2.5 flex items-center justify-between bg-slate-900/25 border border-slate-800/40 rounded-xl px-3 py-2 font-mono">
+                    <span className="text-slate-500">Config: {selectedQuality} • {selectedFormat.toUpperCase()}</span>
+                    <span>Estimated Size: <strong className="text-indigo-400">{estimateOutputSize(selectedQuality, selectedFormat, clipLen)}</strong></span>
+                  </div>
+                )}
               </div>
 
-              {/* 6. DOWNLOAD */}
-              <div className="space-y-2 pt-2 border-t border-slate-900/40">
-                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">6. Download</label>
-                {(extracting || extractionFailed || extractionComplete) ? (
-                  <div className="w-full bg-slate-900/50 border border-slate-800 rounded-xl p-3.5 space-y-2.5 shadow-inner">
+              {/* 6. DOWNLOAD / PROGRESS / SUCCESS / ERROR CARD */}
+              <div className="space-y-4 pt-2 border-t border-slate-900/40">
+                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">6. Download & Progress</label>
+
+                {/* Case A: Success Card */}
+                {extractionComplete && (
+                  <div className="w-full bg-emerald-950/20 border border-emerald-500/25 rounded-2xl p-6 text-center space-y-4 shadow-xl animate-fade-in">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                      <CheckCircle2 className="w-6 h-6 animate-bounce" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="font-display font-800 text-base text-white">Extraction Successful!</h3>
+                      <p className="text-xs text-slate-400">Your custom clip is ready for download.</p>
+                    </div>
+
+                    <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5 max-w-sm mx-auto grid grid-cols-2 gap-2 text-left font-mono text-[11px]">
+                      <div>
+                        <span className="text-slate-500 block text-[9px] uppercase font-bold">Quality</span>
+                        <span className="text-slate-200 font-semibold">{retryPayload?.quality || selectedQuality}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[9px] uppercase font-bold">Format</span>
+                        <span className="text-slate-200 font-semibold">{(retryPayload?.format || selectedFormat).toUpperCase()}</span>
+                      </div>
+                      <div className="col-span-2 pt-1 border-t border-slate-900 mt-1 flex justify-between">
+                        <span className="text-slate-500">Duration:</span>
+                        <span className="text-indigo-300 font-semibold">
+                          {retryPayload ? secsToHMS(hmsToSecs(retryPayload.end) - hmsToSecs(retryPayload.start)) : secsToHMS(clipLen)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2.5 max-w-sm mx-auto">
+                       <a
+                        href={`/api/download/${extractedFileId || jobHistory[0]?.id}`}
+                        download={`CropTube_Clip_${extractedFileId || jobHistory[0]?.id}.${(retryPayload?.format || selectedFormat) === 'webm-audio' ? 'webm' : (retryPayload?.format || selectedFormat)}`}
+                        className="flex-1 py-3 bg-white hover:bg-slate-100 text-slate-950 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-95"
+                      >
+                        <Download className="w-4 h-4" /> Download Clip
+                      </a>
+                      <button
+                        onClick={() => {
+                          setExtractionComplete(false);
+                          setExtractionFailed(false);
+                          setLastError('');
+                          setProgress(0);
+                          setStatusMessage('');
+                          setLogs([]);
+                        }}
+                        className="py-3 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95"
+                      >
+                        Slice Another
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Case B: Failed Card */}
+                {extractionFailed && (
+                  <div className="w-full bg-rose-950/20 border border-rose-500/25 rounded-2xl p-6 text-center space-y-4 shadow-xl animate-fade-in">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                      <AlertCircle className="w-6 h-6 animate-pulse" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="font-display font-800 text-base text-white">Extraction Failed</h3>
+                      <p className="text-xs text-rose-300 px-4 leading-relaxed font-semibold">
+                        {(() => {
+                          const lower = (lastError || '').toLowerCase();
+                          if (lower.includes('confirm you\'re not a bot') || lower.includes('confirm your age') || lower.includes('cookie') || lower.includes('auth')) {
+                            return 'YouTube authentication required. Try re-uploading cookies.';
+                          }
+                          if (lower.includes('format') || lower.includes('requested format') || lower.includes('unavailable')) {
+                            return 'Requested format unavailable. Select another quality and retry.';
+                          }
+                          if (lower.includes('timeout') || lower.includes('timed out') || lower.includes('connection lost')) {
+                            return 'Extraction timed out. Please try again.';
+                          }
+                          return 'An unexpected technical issue occurred during clip extraction.';
+                        })()}
+                      </p>
+                    </div>
+
+                    {/* Collapsible Technical details */}
+                    <div className="max-w-sm mx-auto text-left">
+                      <button
+                        onClick={() => setShowTechnicalDetails(v => !v)}
+                        className="w-full flex justify-between items-center px-3 py-2 bg-slate-950/60 border border-slate-900 hover:border-slate-800 rounded-lg text-[10px] font-mono text-slate-400 transition-all"
+                      >
+                        <span>{showTechnicalDetails ? '▼ Hide Technical Details' : '▶ View Technical Details'}</span>
+                        <span className="text-[8px] text-rose-400 bg-rose-950/40 border border-rose-900/30 px-1.5 py-0.5 rounded">Error Trace</span>
+                      </button>
+                      
+                      {showTechnicalDetails && (
+                        <div className="mt-1.5 p-3 bg-black/80 border border-rose-950/50 rounded-lg text-[9px] text-rose-400/90 font-mono max-h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                          {lastError || 'No technical traceback available.'}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2.5 max-w-sm mx-auto">
+                      <button
+                        onClick={() => handleExtract(retryPayload)}
+                        className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-95"
+                      >
+                        Retry Extraction
+                      </button>
+                      <button
+                        onClick={() => {
+                          setExtractionComplete(false);
+                          setExtractionFailed(false);
+                          setLastError('');
+                          setProgress(0);
+                          setStatusMessage('');
+                          setLogs([]);
+                        }}
+                        className="py-3 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95"
+                      >
+                        Reset Configuration
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Case C: Active Extraction (Progress Card) */}
+                {extracting && !extractionComplete && !extractionFailed && (
+                  <div className="w-full bg-slate-900/50 border border-slate-800/80 rounded-2xl p-5 space-y-4 shadow-inner">
                     <div className="flex justify-between items-center text-xs">
                       <div className="flex items-center gap-2 font-semibold">
-                        {extracting ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                            <span className="text-indigo-400">{statusMessage || 'Processing...'}</span>
-                          </>
-                        ) : extractionFailed ? (
-                          <span className="text-rose-400 flex items-center gap-1">
-                            <AlertCircle className="w-3.5 h-3.5" />
-                            Extraction Failed
-                          </span>
-                        ) : (
-                          <span className="text-emerald-400 flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            {statusMessage}
-                          </span>
-                        )}
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                        <span className="text-indigo-400">{statusMessage || 'Processing clip...'}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {!extracting && (
-                          <button
-                            onClick={() => {
-                              setExtractionFailed(false);
-                              setExtractionComplete(false);
-                              setStatusMessage('');
-                              setProgress(0);
-                              setLastError('');
-                            }}
-                            className="text-[9px] font-mono text-rose-400 hover:text-rose-300 border border-rose-950/40 px-2 py-1 rounded bg-rose-950/20 transition-colors font-bold"
-                          >
-                            Close
-                          </button>
-                        )}
-                        <span className="font-mono font-bold text-slate-400">{progress.toFixed(1)}%</span>
-                      </div>
+                      <span className="font-mono font-bold text-slate-300">{progress.toFixed(1)}%</span>
                     </div>
 
-                    <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden relative border border-slate-900">
+                    <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden relative border border-slate-900">
                       <div
-                        className={`h-full rounded-full transition-all duration-300 ease-out relative ${
-                          extractionFailed
-                            ? 'bg-rose-600'
-                            : 'bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500'
-                        }`}
+                        className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 transition-all duration-300 ease-out relative"
                         style={{ width: `${progress}%` }}
                       >
-                        {!extractionFailed && <div className="absolute inset-0 bg-white/20 animate-pulse" />}
+                        <div className="absolute inset-0 bg-white/25 animate-pulse" />
                       </div>
                     </div>
 
-                    <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                    {/* Stage Timeline */}
+                    <div className="pt-2 border-t border-slate-950/40">
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-2">Extraction Pipeline Lifecycle</p>
+                      
+                      {/* Responsive Timeline Grid */}
+                      <div className="grid grid-cols-5 gap-1.5 text-center">
+                        {[
+                          'Preparing Job',
+                          'Fetching Streams',
+                          'Processing Clip',
+                          'Finalizing Output',
+                          'Download Ready'
+                        ].map((stageLabel, idx) => {
+                          const getActiveStageIndex = () => {
+                            if (extractionComplete) return 4;
+                            if (extractionFailed) return -1;
+                            if (!extracting) return -1;
+                            
+                            const msg = statusMessage.toLowerCase();
+                            if (msg.includes('finalizing') || msg.includes('merger') || msg.includes('ffmpeg') || msg.includes('extractaudio')) {
+                              return 3;
+                            }
+                            if (progress > 0 || msg.includes('downloading') || msg.includes('stream') || msg.includes('progress')) {
+                              return 2;
+                            }
+                            if (msg.includes('preparing') || msg.includes('initiate') || msg.includes('setup')) {
+                              return 0;
+                            }
+                            return 1; // Fetching Streams fallback
+                          };
+                          const currentStageIdx = getActiveStageIndex();
+                          const isPast = idx < currentStageIdx;
+                          const isActive = idx === currentStageIdx;
+                          
+                          let bgClass = 'bg-slate-950 border-slate-900 text-slate-600';
+                          if (isPast) bgClass = 'bg-emerald-950/20 border-emerald-900/50 text-emerald-400';
+                          else if (isActive) bgClass = 'bg-indigo-950/40 border-indigo-500/30 text-indigo-300 shadow-sm border-dashed animate-pulse';
+
+                          return (
+                            <div key={stageLabel} className="space-y-1.5 flex flex-col items-center">
+                              <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-bold font-mono transition-all ${bgClass}`}>
+                                {isPast ? '✓' : idx + 1}
+                              </div>
+                              <span className={`text-[8px] font-medium leading-none block line-clamp-2 ${isActive ? 'text-indigo-300 font-bold' : isPast ? 'text-slate-400' : 'text-slate-600'}`}>
+                                {stageLabel}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between text-[9px] text-slate-500 font-mono pt-1">
                       <span>Processed: {secsToHMS(Math.round((progress / 100) * clipLen))}</span>
                       <span>Target: {secsToHMS(clipLen)}</span>
                     </div>
-
-                    {extractionFailed && lastError && (
-                      <div className="bg-rose-950/20 border border-rose-900/40 rounded-lg p-2.5 text-[10px] text-rose-300 leading-relaxed">
-                        {lastError}
-                      </div>
-                    )}
                   </div>
-                ) : (
+                )}
+
+                {/* Case D: Idle State */}
+                {!extracting && !extractionComplete && !extractionFailed && (
                   <button
-                    onClick={handleExtract}
+                    onClick={() => handleExtract()}
                     disabled={!videoId || clipLen <= 0 || selectedFormatId === 'none' || selectedFormatId === '' || isLoadingFormats}
                     className={`w-full py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all duration-200
                       ${!videoId || clipLen <= 0 || selectedFormatId === 'none' || selectedFormatId === '' || isLoadingFormats
@@ -1691,49 +1977,245 @@ export default function App() {
                     Extract &amp; Download Clip
                   </button>
                 )}
-              </div>
-            </div>
 
-            <div className="space-y-6 pt-4 border-t border-slate-900/60">
-              {/* Session History & Footer */}
-              {clipsHistory.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="text-[10px] font-semibold tracking-widest text-white/60 uppercase flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    Session History
-                  </h3>
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                    {clipsHistory.map(clip => (
-                      <div key={clip.id} className="flex justify-between items-center bg-black/40 border border-white/5 px-3 py-2 rounded-xl hover:border-white/10 transition-colors">
-                        <div>
-                          <p className="text-[11px] font-medium text-white/80">{clip.title}</p>
-                          <p className="text-[9px] text-slate-400 font-mono">
-                            <span className="text-emerald-400 font-semibold mr-1">✓ Success</span> · {clip.duration} · {clip.timestamp}
-                          </p>
-                        </div>
-                        <a href={`/api/download/${clip.id}`} className="text-[10px] text-indigo-300 hover:text-indigo-200 flex items-center gap-1 font-semibold">
-                          <Download className="w-3 h-3" /> Re-download
-                        </a>
+                {/* Log Viewer Panel (Visible during or after extraction/errors) */}
+                {(extracting || extractionFailed || extractionComplete || logs.length > 0) && (
+                  <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl shadow-xl overflow-hidden flex flex-col h-[260px] animate-fade-in">
+                    <div className="bg-slate-950 px-4 py-2.5 border-b border-slate-900 flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                        <span className="text-[10px] font-mono font-bold text-slate-300">yt-dlp_agent@croptube:~$</span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                      
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <label className="flex items-center gap-1 cursor-pointer text-slate-500 hover:text-slate-300 font-mono text-[9px] select-none">
+                          <input
+                            type="checkbox"
+                            checked={autoScroll}
+                            onChange={(e) => setAutoScroll(e.target.checked)}
+                            className="accent-indigo-500 w-3 h-3 bg-slate-900 border-slate-800 rounded"
+                          />
+                          Auto-Scroll
+                        </label>
+                        <span className="text-slate-800">|</span>
+                        <button
+                          onClick={() => {
+                            const rawText = logs.map(l => l.text).join('\n');
+                            navigator.clipboard.writeText(rawText)
+                              .then(() => alert('📋 Logs copied to clipboard!'))
+                              .catch(() => alert('Failed to copy logs.'));
+                          }}
+                          disabled={logs.length === 0}
+                          className="text-[9px] font-mono text-slate-400 hover:text-white disabled:opacity-40 transition-colors"
+                        >
+                          Copy
+                        </button>
+                        <span className="text-slate-800">|</span>
+                        <button
+                          onClick={() => setLogs([])}
+                          disabled={logs.length === 0}
+                          className="text-[9px] font-mono text-rose-400/80 hover:text-rose-300 disabled:opacity-40 transition-colors"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
 
-              <div className="w-full flex flex-col sm:flex-row justify-between items-center gap-3 text-[10px] text-white/30 border-t border-slate-900 pt-4">
-                <span>&copy; {new Date().getFullYear()} CropTube. All rights reserved.</span>
-                <div className="flex flex-wrap justify-center gap-3 sm:gap-4 mt-2 sm:mt-0">
-                  <button onClick={() => setActiveModal('about')} className="hover:text-white transition-colors">About</button>
-                  <button onClick={() => setActiveModal('works')} className="hover:text-white transition-colors">Works</button>
-                  <button onClick={() => setActiveModal('services')} className="hover:text-white transition-colors">Services</button>
-                  <button onClick={() => setActiveModal('docs')} className="hover:text-white transition-colors">Docs &amp; Guide</button>
-                  <button onClick={() => setActiveModal('privacy')} className="hover:text-white transition-colors">Privacy Policy</button>
-                  <button onClick={() => setActiveModal('terms')} className="hover:text-white transition-colors">Terms of Service</button>
-                </div>
+                    {/* Logs terminal contents */}
+                    <div className="flex-1 p-3.5 bg-black/60 font-mono text-[10px] overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 select-text">
+                      {logs.length === 0 ? (
+                        <p className="text-slate-700 italic text-center pt-8">Terminal logs stream waiting...</p>
+                      ) : (
+                        logs.map((log, index) => {
+                          let colorClass = 'text-slate-400';
+                          if (log.type === 'error') {
+                            colorClass = 'text-rose-400 bg-rose-950/15 border-l-2 border-rose-500 pl-2 py-0.5';
+                          } else if (log.type === 'success') {
+                            colorClass = 'text-emerald-400 font-semibold bg-emerald-950/15 border-l-2 border-emerald-500 pl-2 py-0.5';
+                          } else if (log.type === 'system') {
+                            colorClass = 'text-indigo-400 font-semibold border-l-2 border-indigo-500 pl-2';
+                          } else if (log.text.includes('%')) {
+                            colorClass = 'text-indigo-300';
+                          }
+
+                          return (
+                            <div key={index} className={`leading-relaxed break-all font-mono ${colorClass}`}>
+                              {log.text}
+                            </div>
+                          );
+                        })
+                      )}
+                      <div ref={terminalEndRef} />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
+        </div>
+
+        {/* Recent Extractions Section */}
+        <div className="pt-8 border-t border-slate-800/80 space-y-6 z-10 relative">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-indigo-400" />
+              <h2 className="font-display font-extrabold text-base sm:text-lg tracking-tight text-white">
+                Recent Extractions
+              </h2>
+              <span className="text-[10px] bg-slate-900 border border-slate-800 px-2.5 py-0.5 rounded-full text-slate-400 font-mono">
+                {jobHistory.length} / 20
+              </span>
+            </div>
+
+            {jobHistory.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+                {/* Search field */}
+                <div className="relative flex-1 sm:flex-none">
+                  <input
+                    type="text"
+                    placeholder="Search history by title or URL..."
+                    value={historySearchQuery}
+                    onChange={(e) => setHistorySearchQuery(e.target.value)}
+                    className="history-search-input pr-8"
+                  />
+                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  {historySearchQuery && (
+                    <button
+                      onClick={() => setHistorySearchQuery('')}
+                      className="text-slate-500 hover:text-rose-400 absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Clear all button */}
+                <button
+                  onClick={handleClearAllHistory}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40 hover:border-rose-800/50 text-rose-400 hover:text-rose-300 rounded-xl text-xs font-semibold transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Clear All History
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Grid / List of History */}
+          {(() => {
+            const filtered = jobHistory.filter(item => {
+              const q = historySearchQuery.toLowerCase().trim();
+              if (!q) return true;
+              return (item.title || '').toLowerCase().includes(q) || (item.url || '').toLowerCase().includes(q);
+            });
+
+            if (jobHistory.length === 0) {
+              return (
+                <div className="history-empty-state">
+                  <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 shadow-md">
+                    <Clock className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-300">No extractions recorded yet</p>
+                    <p className="text-xs text-slate-500 max-w-sm mt-1 mx-auto leading-relaxed">
+                      Your successful slices will appear here automatically, allowing you to reload settings with a single click.
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+
+            if (filtered.length === 0) {
+              return (
+                <div className="history-empty-state">
+                  <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 shadow-md">
+                    <Search className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-300">No matching extractions found</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Try searching with different keywords.
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filtered.map(item => (
+                  <div key={item.id} className="history-card group">
+                    <div className="space-y-3">
+                      {/* Thumbnail Container */}
+                      <div className="history-thumbnail-container">
+                        <img
+                          src={item.thumbnail}
+                          alt={item.title}
+                          className="history-thumbnail"
+                          loading="lazy"
+                        />
+                        <span className="history-duration-badge">
+                          {item.duration}
+                        </span>
+                      </div>
+
+                      {/* Title & Stats */}
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-bold text-slate-200 line-clamp-2 leading-snug group-hover:text-indigo-400 transition-colors" title={item.title}>
+                          {item.title}
+                        </h4>
+                        <div className="flex justify-between items-center text-[9px] font-mono text-slate-500 pt-0.5">
+                          <span className="bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800/80">{item.quality} • {item.format.toUpperCase()}</span>
+                          <span>
+                            {new Date(item.timestamp).toLocaleString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: false
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 pt-2.5 border-t border-slate-900 mt-auto">
+                      <button
+                        onClick={() => handleReloadSettings(item)}
+                        className="flex-1 py-2 bg-indigo-950/45 hover:bg-indigo-900/60 border border-indigo-900/50 hover:border-indigo-700/50 text-indigo-300 hover:text-indigo-100 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Reload Settings
+                      </button>
+                      <button
+                        onClick={() => handleRemoveHistoryItem(item.id)}
+                        className="p-2 bg-slate-950 hover:bg-rose-950/20 border border-slate-800 hover:border-rose-900/40 text-slate-500 hover:text-rose-400 rounded-xl transition-all"
+                        title="Remove from history"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+        </div>
+
+        {/* Full-width Footer */}
+        <div className="w-full flex flex-col sm:flex-row justify-between items-center gap-3 text-[10px] text-white/30 border-t border-slate-900 pt-6 z-10 relative">
+          <span>&copy; {new Date().getFullYear()} CropTube. All rights reserved.</span>
+          <div className="flex flex-wrap justify-center gap-3 sm:gap-4 mt-2 sm:mt-0">
+            <button onClick={() => setActiveModal('about')} className="hover:text-white transition-colors">About</button>
+            <button onClick={() => setActiveModal('works')} className="hover:text-white transition-colors">Works</button>
+            <button onClick={() => setActiveModal('services')} className="hover:text-white transition-colors">Services</button>
+            <button onClick={() => setActiveModal('docs')} className="hover:text-white transition-colors">Docs &amp; Guide</button>
+            <button onClick={() => setActiveModal('privacy')} className="hover:text-white transition-colors">Privacy Policy</button>
+            <button onClick={() => setActiveModal('terms')} className="hover:text-white transition-colors">Terms of Service</button>
+          </div>
         </div>
 
       </div>
