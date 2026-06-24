@@ -874,7 +874,10 @@ app.get('/api/extract/stream', async (req, res) => {
   }, 20000);
 
   const logToClient = (type, message) => {
-    res.write(`data: ${JSON.stringify({ type, message })}\n\n`);
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ type, message })}\n\n`);
+      if (typeof res.flush === 'function') res.flush();
+    }
   };
   // SSE connection established
 
@@ -983,29 +986,41 @@ app.get('/api/extract/stream', async (req, res) => {
   logToClient('status', 'Preparing clip...');
 
   const child = spawn(localYtdlpCmd, args, { env: ytdlpEnv() });
-  
   // Set job status to running and attach child handle ONLY after successful spawn
   job.status = 'running';
   job.child = child;
 
   let stderrBuffer = '';
 
+  // ── Two-pass progress tracking ───────────────────────────────────────────
+  // For video+audio extractions, yt-dlp runs two download passes (video then
+  // audio), each emitting 0→100%. We remap them to separate thirds so the
+  // progress bar climbs smoothly instead of resetting.
+  // Pass 0 = video  → display 0–47%
+  // Pass 1 = audio  → display 48–94%
+  // Merger / ffmpeg → display 97%
+  // completed event → display 100%
+  let downloadPass = 0;        // which stream pass we're in (0-indexed)
+  let lastRawPct  = -1;        // last received raw pct to detect pass resets
+
+  function remapPct(rawPct) {
+    if (isAudio) {
+      // Single audio-only pass: 0–94%
+      return Math.min(rawPct * 0.94, 94);
+    }
+    if (downloadPass === 0) {
+      // First pass (video): 0–47%
+      return Math.min(rawPct * 0.47, 47);
+    }
+    // Second pass (audio): 48–94%
+    return 48 + Math.min(rawPct * 0.46, 46);
+  }
+
   child.stdout.on('data', (data) => {
-    const lines = data.toString().split('\n');
-    lines.forEach(line => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      console.log(`[yt-dlp] ${trimmed}`);
-      if (/\[download\]/.test(trimmed)) {
-        const pctMatch = trimmed.match(/(\d+(?:\.\d+)?)%/);
-        if (pctMatch) {
-          logToClient('progress', { stage: 'Downloading stream...', pct: parseFloat(pctMatch[1]) });
-        } else {
-          logToClient('status', 'Downloading stream...');
-        }
-      } else if (/\[Merger\]|\[ffmpeg\]|\[ExtractAudio\]/i.test(trimmed)) {
-        logToClient('status', 'Finalizing clip...');
-      }
+    // yt-dlp progress goes to stderr; log stdout for diagnostics only
+    data.toString().split('\n').forEach(line => {
+      const t = line.trim();
+      if (t) console.log(`[yt-dlp stdout] ${t}`);
     });
   });
 
@@ -1013,12 +1028,45 @@ app.get('/api/extract/stream', async (req, res) => {
     const lines = data.toString().split('\n');
     lines.forEach(line => {
       const trimmed = line.trim();
-      if (trimmed) {
-        stderrBuffer += trimmed + '\n';
-        console.error(`[yt-dlp stderr] ${trimmed}`);
+      if (!trimmed) return;
+      stderrBuffer += trimmed + '\n';
+      console.log(`[yt-dlp] ${trimmed}`);
+
+      // ── Progress lines ────────────────────────────────────────────────────
+      if (/\[download\]/i.test(trimmed)) {
+        const pctMatch = trimmed.match(/(\d+(?:\.\d+)?)%/);
+        if (pctMatch) {
+          const rawPct = parseFloat(pctMatch[1]);
+
+          // Detect a new download pass: percentage reset to a value much lower
+          // than the last seen value (e.g. 100→0 between video and audio pass)
+          if (rawPct < lastRawPct - 30 && lastRawPct > 50) {
+            downloadPass++;
+            console.log(`[Progress] Detected new download pass: ${downloadPass}`);
+          }
+          lastRawPct = rawPct;
+
+          const displayPct = remapPct(rawPct);
+          logToClient('progress', { stage: 'Downloading stream...', pct: displayPct });
+
+        } else if (trimmed.includes('Destination:')) {
+          // New stream file started — treat as a new pass boundary if past first
+          if (lastRawPct >= 99) {
+            downloadPass++;
+            lastRawPct = 0;
+            console.log(`[Progress] New Destination detected — pass ${downloadPass}`);
+          }
+          logToClient('status', 'Fetching next stream...');
+        } else {
+          logToClient('status', 'Downloading stream...');
+        }
+
+      } else if (/\[Merger\]|\[ffmpeg\]|\[ExtractAudio\]/i.test(trimmed)) {
+        logToClient('progress', { stage: 'Finalizing clip...', pct: 97 });
       }
     });
   });
+
 
   let isFinished = false;
   let isCompletedSuccessfully = false;

@@ -683,6 +683,8 @@ export default function App() {
   const [retryPayload, setRetryPayload] = useState(null);
   const [serverBusy, setServerBusy] = useState(false);
   const [extractedFileId, setExtractedFileId] = useState('');
+  // 0=Preparing, 1=Fetching Streams, 2=Processing Clip, 3=Finalizing Output, 4=Download Ready
+  const [pipelineStage, setPipelineStage] = useState(0);
 
   const playerRef = useRef(null);
   const ytApiReady = useRef(false);
@@ -1036,6 +1038,7 @@ export default function App() {
     setExtracting(true);
     setCurrentStep(1);
     setProgress(0);
+    setPipelineStage(0);
     setStatusMessage('Preparing clip...');
     setExtractionFailed(false);
     setExtractionComplete(false);
@@ -1077,6 +1080,7 @@ export default function App() {
 
         es.onopen = () => {
           console.log('[Frontend SSE] connected');
+          setPipelineStage(1); // Fetching Streams
           setLogs(prev => [...prev, { text: `[system] SSE Stream connected. Slicing in progress...`, type: 'system' }]);
         };
 
@@ -1085,12 +1089,28 @@ export default function App() {
             const data = JSON.parse(evt.data);
             if (data.type === 'status') {
               setStatusMessage(data.message);
+              // Map known status messages to pipeline stages
+              const msg = (data.message || '').toLowerCase();
+              if (msg.includes('fetching') || msg.includes('next stream')) {
+                setPipelineStage(1);
+              } else if (msg.includes('downloading')) {
+                setPipelineStage(2);
+              } else if (msg.includes('finalizing')) {
+                setPipelineStage(3);
+              }
               setLogs(prev => [...prev, { text: `[info] ${data.message}`, type: 'info' }]);
             } else if (data.type === 'progress') {
               console.log('[Frontend SSE] progress update');
               const { stage, pct } = data.message;
               setStatusMessage(stage);
               setProgress(pct);
+              // Advance pipeline stage based on stage message
+              const stageLower = (stage || '').toLowerCase();
+              if (stageLower.includes('finalizing')) {
+                setPipelineStage(3);
+              } else if (stageLower.includes('downloading') || pct > 0) {
+                setPipelineStage(2);
+              }
               setLogs(prev => [...prev, { text: `[info] ${stage} (${pct.toFixed(1)}%)`, type: 'info' }]);
             } else if (data.type === 'cookie_error') {
               setCookiesExpired(true);
@@ -1101,6 +1121,7 @@ export default function App() {
               setStatusMessage('');
               setExtracting(false);
               setCurrentStep(0);
+              setPipelineStage(0);
               es.close();
               console.log('[Frontend SSE] eventsource closed');
               setLogs(prev => [...prev, { text: `[error] Authentication error: ${data.message}`, type: 'error' }]);
@@ -1110,6 +1131,7 @@ export default function App() {
               setStatusMessage('');
               setExtracting(false);
               setCurrentStep(0);
+              setPipelineStage(0);
               es.close();
               console.log('[Frontend SSE] eventsource closed');
               setLogs(prev => [...prev, { text: `[error] Technical error: ${data.message}`, type: 'error' }]);
@@ -1125,6 +1147,7 @@ export default function App() {
           setExtractionFailed(false);
           setLastError('');
           setProgress(100);
+          setPipelineStage(4);
           setStatusMessage('Download ready.');
           setLogs(prev => [...prev, { text: `[success] Clip extraction completed successfully!`, type: 'success' }]);
 
@@ -1974,26 +1997,9 @@ export default function App() {
                           'Finalizing Output',
                           'Download Ready'
                         ].map((stageLabel, idx) => {
-                          const getActiveStageIndex = () => {
-                            if (extractionComplete) return 4;
-                            if (extractionFailed) return -1;
-                            if (!extracting) return -1;
-                            
-                            const msg = statusMessage.toLowerCase();
-                            if (msg.includes('finalizing') || msg.includes('merger') || msg.includes('ffmpeg') || msg.includes('extractaudio')) {
-                              return 3;
-                            }
-                            if (progress > 0 || msg.includes('downloading') || msg.includes('stream') || msg.includes('progress')) {
-                              return 2;
-                            }
-                            if (msg.includes('preparing') || msg.includes('initiate') || msg.includes('setup')) {
-                              return 0;
-                            }
-                            return 1; // Fetching Streams fallback
-                          };
-                          const currentStageIdx = getActiveStageIndex();
-                          const isPast = idx < currentStageIdx;
-                          const isActive = idx === currentStageIdx;
+                          // pipelineStage is driven directly by SSE events, never by string matching
+                          const isPast = idx < pipelineStage;
+                          const isActive = idx === pipelineStage;
                           
                           let bgClass = 'bg-slate-950 border-slate-900 text-slate-600';
                           if (isPast) bgClass = 'bg-emerald-950/20 border-emerald-900/50 text-emerald-400';
