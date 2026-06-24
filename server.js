@@ -104,6 +104,65 @@ function getFileResolution(filePath) {
     return 'error';
   }
 }
+// ─── Phase 7 Centralized Configuration & Utilities ──────────────────────────
+const CONFIG = {
+  MAX_CONCURRENT_EXTRACTIONS: 3,
+  MAX_CLIP_DURATION: 600, // 10 minutes (in seconds)
+  JOB_EXPIRY_MS: 15 * 60 * 1000 // 15 minutes
+};
+
+function hmsToSecs(hms) {
+  if (!hms) return 0;
+  const parts = hms.split(':').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return 0;
+  return parts[0] * 3600 + parts[1] * 60 + parts[2];
+}
+
+function isSupportedYouTubeUrl(urlStr) {
+  try {
+    const parsed = new URL(urlStr);
+    const host = parsed.hostname.toLowerCase();
+    return host === 'youtube.com' || 
+           host.endsWith('.youtube.com') || 
+           host === 'youtu.be' || 
+           host.endsWith('.youtu.be');
+  } catch (e) {
+    return false;
+  }
+}
+
+function validateExtractionParams(url, start, end) {
+  if (!url) {
+    return { valid: false, error: 'Missing video URL.', code: 'INVALID_URL' };
+  }
+  if (!isSupportedYouTubeUrl(url)) {
+    return { valid: false, error: 'Invalid or unsupported YouTube URL.', code: 'INVALID_URL' };
+  }
+  const timeRegex = /^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
+  if (!start || !timeRegex.test(start)) {
+    return { valid: false, error: 'Start time must be formatted exactly as HH:MM:SS.', code: 'INVALID_START_TIME' };
+  }
+  if (!end || !timeRegex.test(end)) {
+    return { valid: false, error: 'End time must be formatted exactly as HH:MM:SS.', code: 'INVALID_END_TIME' };
+  }
+  
+  const startSecs = hmsToSecs(start);
+  const endSecs = hmsToSecs(end);
+  if (endSecs <= startSecs) {
+    return { valid: false, error: 'End time must be after start time.', code: 'INVALID_TIME_RANGE' };
+  }
+  
+  const duration = endSecs - startSecs;
+  if (duration <= 0) {
+    return { valid: false, error: 'Clip duration must be greater than 0 seconds.', code: 'INVALID_DURATION' };
+  }
+  
+  if (duration > CONFIG.MAX_CLIP_DURATION) {
+    return { valid: false, error: `Clip duration exceeds the maximum allowed limit of ${CONFIG.MAX_CLIP_DURATION / 60} minutes.`, code: 'DURATION_LIMIT_EXCEEDED' };
+  }
+  
+  return { valid: true };
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -111,6 +170,59 @@ const PORT = process.env.PORT || 3001;
 // Middlewares
 app.use(cors());
 app.use(express.json());
+
+// ─── Rate Limiter Storage & Middleware (Best-Effort, In-Memory Only) ────────
+// Note: This is a best-effort protection mechanism. It is non-persistent
+// and is not distributed-safe (stores IP states in a local Javascript Map in-memory).
+const rateLimitDb = new Map();
+
+function rateLimiter({ windowMs, max, message, code }) {
+  return (req, res, next) => {
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const now = Date.now();
+    
+    if (!rateLimitDb.has(ip)) {
+      rateLimitDb.set(ip, []);
+    }
+    
+    let requests = rateLimitDb.get(ip);
+    requests = requests.filter(timestamp => now - timestamp < windowMs);
+    
+    if (requests.length >= max) {
+      console.warn(`[Rate Limit] Rejected request from IP: ${ip} for path: ${req.path}`);
+      return res.status(429).json({
+        success: false,
+        error: message || 'Too many requests. Please slow down.',
+        code: code || 'RATE_LIMIT_EXCEEDED'
+      });
+    }
+    
+    requests.push(now);
+    rateLimitDb.set(ip, requests);
+    next();
+  };
+}
+
+const searchLimiter = rateLimiter({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: 'Too many search requests. Please wait a minute.',
+  code: 'RATE_LIMIT_EXCEEDED'
+});
+
+const formatsLimiter = rateLimiter({
+  windowMs: 60 * 1000,
+  max: 15,
+  message: 'Too many format retrieval requests. Please wait a minute.',
+  code: 'RATE_LIMIT_EXCEEDED'
+});
+
+const extractLimiter = rateLimiter({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: 'Too many extraction requests. Please wait a minute.',
+  code: 'RATE_LIMIT_EXCEEDED'
+});
 
 // Set up paths
 const binDir = path.join(__dirname, 'bin');
@@ -223,10 +335,14 @@ function commonArgs(quality = '', customCookiePath = null) {
 // ----------------------------------------------------
 
 // GET /api/search: Search YouTube videos using yt-dlp
-app.get('/api/search', async (req, res) => {
+app.get('/api/search', searchLimiter, async (req, res) => {
   const { q } = req.query;
   if (!q) {
-    return res.status(400).json({ error: 'Missing search query.' });
+    return res.status(400).json({
+      success: false,
+      error: 'Missing search query.',
+      code: 'MISSING_QUERY'
+    });
   }
 
   const args = [
@@ -260,7 +376,11 @@ app.get('/api/search', async (req, res) => {
   child.on('close', (code) => {
     if (code !== 0) {
       console.error(`[Search] yt-dlp search failed with exit code ${code}: ${stderrData}`);
-      return res.status(500).json({ error: 'Search failed. Please try again.' });
+      return res.status(500).json({
+        success: false,
+        error: 'Search failed. Please try again.',
+        code: 'SEARCH_FAILED'
+      });
     }
 
     try {
@@ -276,17 +396,32 @@ app.get('/api/search', async (req, res) => {
       res.json({ entries });
     } catch (parseErr) {
       console.error('[Search] Failed to parse search JSON:', parseErr);
-      res.status(500).json({ error: 'Failed to process search results.' });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to process search results.',
+        code: 'PARSE_ERROR'
+      });
     }
   });
 });
 
 // GET /api/formats: Get available resolutions and formats for a YouTube video
-app.get('/api/formats', async (req, res) => {
+app.get('/api/formats', formatsLimiter, async (req, res) => {
   try {
   const { url } = req.query;
   if (!url) {
-    return res.status(400).json({ error: 'Missing video URL.' });
+    return res.status(400).json({
+      success: false,
+      error: 'Missing video URL.',
+      code: 'MISSING_URL'
+    });
+  }
+  if (!isSupportedYouTubeUrl(url)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid or unsupported YouTube URL.',
+      code: 'INVALID_URL'
+    });
   }
 
   const config = getCommonArgsConfig('4K');
@@ -329,7 +464,11 @@ app.get('/api/formats', async (req, res) => {
 
       sendTelegramAlert('Format Retrieval', url, 'N/A', 'N/A', stderrData, 'N/A');
 
-      return res.status(isBot ? 403 : 500).json({ error: errorMsg });
+      return res.status(isBot ? 403 : 500).json({
+        success: false,
+        error: errorMsg,
+        code: isBot ? 'BOT_DETECTION' : 'FORMATS_FAILED'
+      });
     }
 
     try {
@@ -471,21 +610,159 @@ app.get('/api/formats', async (req, res) => {
       });
     } catch (parseErr) {
       console.error('[Formats] Failed to parse JSON:', parseErr);
-      res.status(500).json({ error: 'Failed to process format list.' });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to process format list.',
+        code: 'PARSE_ERROR'
+      });
     }
   });
   } catch (err) {
     console.error('[Formats] Unexpected error:', err);
     sendTelegramAlert('Format Retrieval Exception', req.query.url, 'N/A', 'N/A', err.stack || err.message, 'N/A');
-    res.status(500).json({ error: 'Failed to retrieve video formats.' });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve video formats.',
+      code: 'UNEXPECTED_ERROR'
+    });
   }
 });
 
 // Active extraction jobs registry
 const activeJobs = new Map();
 
+function getActiveExtractionsCount() {
+  let count = 0;
+  for (const job of activeJobs.values()) {
+    if (job.status === 'running') {
+      count++;
+    }
+  }
+  return count;
+}
+
+// Periodic job and file sweeper statistics (useful for the detailed health endpoint)
+const sweepStats = {
+  totalSweepsRun: 0,
+  totalFilesDeleted: 0,
+  lastSweepTime: null,
+  errorsCount: 0
+};
+
+function runStaleFileSweeper() {
+  try {
+    console.log('[Sweeper] Starting stale file sweep...');
+    if (!fs.existsSync(tempDir)) {
+      return;
+    }
+    
+    const now = Date.now();
+    const files = fs.readdirSync(tempDir);
+    let filesDeleted = 0;
+    
+    files.forEach(file => {
+      const filePath = path.join(tempDir, file);
+      try {
+        const stats = fs.statSync(filePath);
+        
+        // 1. Path Guard: Must be a file, not a directory (e.g. cacheDir)
+        if (!stats.isFile()) {
+          return;
+        }
+        
+        // 2. Prefix Guard: Must strictly start with 'croptube_' or 'cookies_'
+        let fileId = '';
+        if (file.startsWith('croptube_')) {
+          fileId = file.replace('croptube_', '').split('.')[0];
+        } else if (file.startsWith('cookies_')) {
+          fileId = file.replace('cookies_', '').split('.')[0];
+        } else {
+          // Ignore other files entirely (e.g. system files or random folders)
+          return;
+        }
+        
+        // 3. Active Job Guard: Verify file is not associated with an active job in the Map
+        if (fileId && activeJobs.has(fileId)) {
+          console.log(`[Sweeper] Skipping file ${file} because Job ${fileId} is currently active.`);
+          return;
+        }
+        
+        // 4. Age Guard: Must be older than 30 minutes
+        const ageMs = now - stats.mtimeMs;
+        if (ageMs > 30 * 60 * 1000) {
+          fs.unlinkSync(filePath);
+          filesDeleted++;
+          console.log(`[Sweeper] Deleted stale file: ${file} (age: ${Math.round(ageMs / 1000 / 60)}m)`);
+        }
+      } catch (fileErr) {
+        console.error(`[Sweeper] Error processing file ${file}:`, fileErr);
+        sweepStats.errorsCount++;
+      }
+    });
+    
+    sweepStats.totalSweepsRun++;
+    sweepStats.totalFilesDeleted += filesDeleted;
+    sweepStats.lastSweepTime = new Date().toISOString();
+    console.log(`[Sweeper] Sweep completed. Deleted ${filesDeleted} file(s).`);
+  } catch (err) {
+    console.error('[Sweeper] Sweeper failed:', err);
+    sweepStats.errorsCount++;
+  }
+}
+
+function runPeriodicCleanup() {
+  const now = Date.now();
+  console.log('[Cleanup] Starting periodic job & file cleanup...');
+  
+  // 1. Clean up stale jobs in activeJobs Map
+  for (const [fileId, job] of activeJobs.entries()) {
+    if (now - job.createdAt > CONFIG.JOB_EXPIRY_MS) {
+      console.log(`[Cleanup] Expiring stale job ${fileId} (created ${Math.round((now - job.createdAt) / 1000 / 60)}m ago)`);
+      
+      // Kill hung process if still attached
+      if (job.child && !job.child.killed) {
+        try {
+          job.child.kill('SIGKILL');
+          console.log(`[Cleanup] Killed hung process for stale job ${fileId}`);
+        } catch (e) {}
+      }
+      
+      // Clean up temporary cookie file
+      if (job.hasCookies && job.cookiePath && fs.existsSync(job.cookiePath)) {
+        try {
+          fs.unlinkSync(job.cookiePath);
+          console.log(`[Cleanup] Deleted temporary cookie file for stale job ${fileId}`);
+        } catch (e) {}
+      }
+      
+      // Clean up temporary outputs if present
+      const targetFormat = job.format || 'mp4';
+      const outputFilename = `croptube_${fileId}.${targetFormat === 'webm-audio' ? 'webm' : targetFormat}`;
+      const outputPath = path.join(tempDir, outputFilename);
+      const partPath = `${outputPath}.part`;
+      
+      [outputPath, partPath].forEach(p => {
+        if (fs.existsSync(p)) {
+          try {
+            fs.unlinkSync(p);
+            console.log(`[Cleanup] Deleted temporary output file: ${p}`);
+          } catch (e) {}
+        }
+      });
+      
+      activeJobs.delete(fileId);
+    }
+  }
+  
+  // 2. Scan tempDir for orphaned files
+  runStaleFileSweeper();
+}
+
+// Run periodic cleanup every 10 minutes
+setInterval(runPeriodicCleanup, 10 * 60 * 1000);
+
 // Step 1: Initiate job, cache parameters, write temporary cookie file if provided
-app.post('/api/extract/initiate', (req, res) => {
+app.post('/api/extract/initiate', extractLimiter, (req, res) => {
   try {
     const { url, start, end, format, quality, format_id, cookies } = req.body;
     
@@ -495,8 +772,26 @@ app.post('/api/extract/initiate', (req, res) => {
     }
     console.log(`[Initiate Backend Log] Request body received:`, JSON.stringify(loggedBody, null, 2));
 
-    if (!url || !start || !end) {
-      return res.status(400).json({ error: 'Missing required parameters: url, start, end timestamps.' });
+    // 1. Concurrent Extraction Protection
+    const currentActiveCount = getActiveExtractionsCount();
+    if (currentActiveCount >= CONFIG.MAX_CONCURRENT_EXTRACTIONS) {
+      console.warn(`[Extraction Limit] Rejected request. Active extractions count: ${currentActiveCount}`);
+      return res.status(503).json({
+        success: false,
+        error: 'Server is currently busy. Please wait for existing extraction jobs to complete.',
+        code: 'SERVER_BUSY'
+      });
+    }
+
+    // 2. Parameters & URL Validation
+    const validation = validateExtractionParams(url, start, end);
+    if (!validation.valid) {
+      console.warn(`[Validation Failure] Rejecting request: ${validation.error}`);
+      return res.status(400).json({
+        success: false,
+        error: validation.error,
+        code: validation.code
+      });
     }
 
     console.log(`[Initiate] Job request: quality=${quality}, format_id=${format_id || 'none'}`);
@@ -512,7 +807,11 @@ app.post('/api/extract/initiate', (req, res) => {
         console.log(`[Cookies] Cached temporary Netscape cookie file for Job: ${fileId}`);
       } catch (err) {
         console.error('[Cookies] Failed to write temporary cookie file:', err);
-        return res.status(500).json({ error: 'Failed to register authentication cookies on server.' });
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to register authentication cookies on server.',
+          code: 'COOKIE_WRITE_FAILED'
+        });
       }
     }
 
@@ -525,25 +824,33 @@ app.post('/api/extract/initiate', (req, res) => {
       quality,
       format_id,
       hasCookies,
-      cookiePath
+      cookiePath,
+      status: 'initiated',
+      createdAt: Date.now()
     });
 
-    // Automatically expire job parameters after 15 minutes to prevent memory leaks
+    console.log(`[Extraction Start] Job ID: ${fileId}, URL: ${url}, Range: ${start}-${end}, Quality: ${quality}, Format: ${format}`);
+
+    // Automatically expire job parameters after config expiry limit to prevent memory leaks
     setTimeout(() => {
       if (activeJobs.has(fileId)) {
         const job = activeJobs.get(fileId);
-        if (job.hasCookies && fs.existsSync(job.cookiePath)) {
+        if (job.hasCookies && job.cookiePath && fs.existsSync(job.cookiePath)) {
           try { fs.unlinkSync(job.cookiePath); } catch (e) {}
         }
         activeJobs.delete(fileId);
       }
-    }, 15 * 60 * 1000);
+    }, CONFIG.JOB_EXPIRY_MS);
 
-    return res.json({ fileId });
+    return res.json({ success: true, fileId });
   } catch (err) {
     console.error('[Initiate] Unexpected error:', err);
     sendTelegramAlert('Initiate Job Exception', req.body.url, req.body.quality, req.body.format_id, err.stack || err.message, 'N/A');
-    return res.status(500).json({ error: 'Clip extraction failed. Please try again.' });
+    return res.status(500).json({
+      success: false,
+      error: 'Clip extraction failed. Please try again.',
+      code: 'UNEXPECTED_ERROR'
+    });
   }
 });
 
@@ -573,6 +880,14 @@ app.get('/api/extract/stream', async (req, res) => {
 
   if (!fileId || !activeJobs.has(fileId)) {
     logToClient('error', 'Job expired or invalid session ID. Please re-initiate extraction.');
+    clearInterval(keepaliveInterval);
+    return res.end();
+  }
+
+  // Verify concurrency limit before spawning
+  if (getActiveExtractionsCount() >= CONFIG.MAX_CONCURRENT_EXTRACTIONS) {
+    logToClient('error', 'Server is currently busy. Please wait for existing extraction jobs to complete.');
+    clearInterval(keepaliveInterval);
     return res.end();
   }
 
@@ -583,15 +898,17 @@ app.get('/api/extract/stream', async (req, res) => {
   const timeRegex = /^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
   if (!timeRegex.test(start) || !timeRegex.test(end)) {
     logToClient('error', 'Timestamps must be formatted exactly as HH:MM:SS.');
+    clearInterval(keepaliveInterval);
     return res.end();
   }
 
-  let ytdlpCmd;
+  let localYtdlpCmd;
   try {
-    ytdlpCmd = await resolveYtdlpPath();
+    localYtdlpCmd = resolveYtdlpPath();
   } catch (err) {
     console.error(`[Extract] Dependency resolution failed: ${err.message}`);
     logToClient('error', 'Service temporarily unavailable. Please try again later.');
+    clearInterval(keepaliveInterval);
     return res.end();
   }
 
@@ -605,7 +922,6 @@ app.get('/api/extract/stream', async (req, res) => {
   // format_id is required — refuse extraction if missing
   if (!format_id || format_id === 'none') {
     console.error(`[Extract] Missing format_id — aborting.`);
-    sendTelegramAlert('Extraction - Missing Format', url, quality, format_id, 'Missing format_id parameter', fileId);
     logToClient('error', 'Unable to fetch video information. Please reload and try again.');
     clearInterval(keepaliveInterval);
     return res.end();
@@ -651,8 +967,6 @@ app.get('/api/extract/stream', async (req, res) => {
     args.push('--postprocessor-args', postprocessorArgs);
   }
 
-  // Cloud auth cookies present (server-side only, not exposed to client)
-
   args.push('--ffmpeg-location', resolvedFFmpegPath);
   args.push('-f', formatSelector);
 
@@ -668,7 +982,12 @@ app.get('/api/extract/stream', async (req, res) => {
 
   logToClient('status', 'Preparing clip...');
 
-  const child = spawn(ytdlpCmd, args, { env: ytdlpEnv() });
+  const child = spawn(localYtdlpCmd, args, { env: ytdlpEnv() });
+  
+  // Set job status to running and attach child handle ONLY after successful spawn
+  job.status = 'running';
+  job.child = child;
+
   let stderrBuffer = '';
 
   child.stdout.on('data', (data) => {
@@ -676,9 +995,7 @@ app.get('/api/extract/stream', async (req, res) => {
     lines.forEach(line => {
       const trimmed = line.trim();
       if (!trimmed) return;
-      // Server-side diagnostic logging — never forward raw output to client
       console.log(`[yt-dlp] ${trimmed}`);
-      // Map to user-friendly client status updates
       if (/\[download\]/.test(trimmed)) {
         const pctMatch = trimmed.match(/(\d+(?:\.\d+)?)%/);
         if (pctMatch) {
@@ -698,24 +1015,37 @@ app.get('/api/extract/stream', async (req, res) => {
       const trimmed = line.trim();
       if (trimmed) {
         stderrBuffer += trimmed + '\n';
-        // Server-side only — never expose stderr output to client
         console.error(`[yt-dlp stderr] ${trimmed}`);
       }
     });
   });
 
   let isFinished = false;
-  const finish = (err = null) => {
+  let isCompletedSuccessfully = false;
+
+  const finish = (errType = null) => {
     if (isFinished) return;
     isFinished = true;
 
     clearInterval(keepaliveInterval);
+
+    // Update status in activeJobs
+    if (isCompletedSuccessfully) {
+      job.status = 'completed';
+    } else if (errType === 'abort') {
+      job.status = 'aborted';
+    } else {
+      job.status = 'failed';
+    }
 
     if (child && !child.killed) {
       try {
         child.kill('SIGKILL');
       } catch (_) {}
     }
+
+    // Clear process handle
+    job.child = null;
 
     if (!hasCookies && fs.existsSync(globalCookiePath)) {
       console.log(`[Cookies] Preserved global cookie file`);
@@ -731,6 +1061,22 @@ app.get('/api/extract/stream', async (req, res) => {
       }
     }
 
+    // Defensive cleanup of partial files on abort/failure
+    if (!isCompletedSuccessfully) {
+      const partPath = `${outputPath}.part`;
+      [outputPath, partPath].forEach(p => {
+        try {
+          if (fs.existsSync(p)) {
+            fs.unlinkSync(p);
+            console.log(`[Cleanup] Deleted incomplete file: ${p}`);
+          }
+        } catch (unlinkErr) {
+          console.error(`[Cleanup] Failed to delete incomplete file ${p}:`, unlinkErr);
+        }
+      });
+    }
+
+    // Remove job from active registry
     activeJobs.delete(fileId);
 
     if (!res.writableEnded) {
@@ -739,6 +1085,7 @@ app.get('/api/extract/stream', async (req, res) => {
   };
 
   child.on('error', (err) => {
+    if (isFinished) return;
     console.error(`[Extract] Process error: ${err.message}`);
     sendTelegramAlert('Extraction - Spawn Error', url, quality, format_id, err.message, fileId);
     if (!res.writableEnded) {
@@ -754,10 +1101,12 @@ app.get('/api/extract/stream', async (req, res) => {
   });
 
   child.on('close', (code) => {
+    if (isFinished) return;
+
     if (code === 0 && fs.existsSync(outputPath)) {
       const fileRes = getFileResolution(outputPath);
-      // Server-side diagnostic logging only
       console.log(`[Final Output] resolution=${fileRes}, postprocessor=${postprocessorArgs || 'none'}`);
+      isCompletedSuccessfully = true;
       if (!res.writableEnded) {
         res.write(`event: completed\ndata: ${JSON.stringify({ success: true })}\n\n`, 'utf8', () => {
           finish();
@@ -770,10 +1119,14 @@ app.get('/api/extract/stream', async (req, res) => {
       }
     } else {
       console.error(`[Extract] Process terminated (code ${code}). Output exists: ${fs.existsSync(outputPath)}`);
-      sendTelegramAlert('Extraction - Process Error', url, quality, format_id, `Exit Code: ${code}\nStderr: ${stderrBuffer.substring(0, 300)}`, fileId);
+      
       const isCookieError = stderrBuffer.includes("Sign in to confirm you're not a bot") ||
                             stderrBuffer.includes('Sign in to confirm your age') ||
                             stderrBuffer.includes('cookies have');
+      
+      // Filter out alerts for routine errors
+      sendTelegramAlert('Extraction - Process Error', url, quality, format_id, `Exit Code: ${code}\nStderr: ${stderrBuffer.substring(0, 300)}`, fileId);
+      
       if (isCookieError) {
         if (!res.writableEnded) {
           res.write(`data: ${JSON.stringify({ type: 'cookie_error', message: 'Authentication cookies may be expired. Please update your session cookies in Settings.' })}\n\n`, 'utf8', () => {
@@ -801,12 +1154,20 @@ app.get('/api/extract/stream', async (req, res) => {
   });
 
   req.on('close', () => {
+    if (isFinished) return;
     console.log(`[Abort] SSE client closed connection for Job: ${fileId}`);
-    finish();
+    finish('abort');
   });
+
   } catch (err) {
     console.error('[Extract Stream] Unexpected error:', err);
     sendTelegramAlert('Extraction - Stream Exception', req.query.url, 'N/A', 'N/A', err.stack || err.message, req.query.fileId);
+    if (!res.writableEnded) {
+      try {
+        res.write(`data: ${JSON.stringify({ type: 'error', message: 'An unexpected server error occurred.' })}\n\n`);
+        res.end();
+      } catch (e) {}
+    }
   }
 });
 
@@ -827,11 +1188,81 @@ app.get('/api/debug/cookies', (req, res) => {
 });
 
 
+// GET /api/health: Public status diagnostics (no sensitive paths, directories, tokens, or arguments)
+app.get('/api/health', (req, res) => {
+  try {
+    const ytDlpExists = !!ytdlpCmd && fs.existsSync(ytdlpCmd);
+    const ffmpegExists = !!resolvedFFmpegPath && fs.existsSync(resolvedFFmpegPath);
+    const cookiesPresent = fs.existsSync(globalCookiePath);
+    
+    res.json({
+      status: 'ok',
+      uptime: Math.round(process.uptime()),
+      environment: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString(),
+      ytDlp: ytDlpExists,
+      ffmpeg: ffmpegExists,
+      activeJobs: getActiveExtractionsCount(),
+      cookiesPresent: cookiesPresent
+    });
+  } catch (err) {
+    console.error('[Health] Failed to get health status:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Health check failed',
+      code: 'HEALTH_CHECK_FAILED'
+    });
+  }
+});
+
+// GET /api/health/detailed: Development detailed diagnostics (forbidden in production)
+app.get('/api/health/detailed', (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden in production environment.',
+      code: 'FORBIDDEN'
+    });
+  }
+  
+  try {
+    const activeJobIds = Array.from(activeJobs.keys());
+    const detailedJobs = Array.from(activeJobs.entries()).map(([id, job]) => ({
+      id,
+      status: job.status,
+      createdAt: job.createdAt,
+      hasCookies: job.hasCookies,
+      quality: job.quality,
+      format: job.format
+    }));
+    
+    res.json({
+      status: 'ok',
+      uptime: Math.round(process.uptime()),
+      environment: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString(),
+      activeJobsCount: getActiveExtractionsCount(),
+      activeJobIds,
+      activeJobs: detailedJobs,
+      memoryUsage: process.memoryUsage(),
+      sweepStats
+    });
+  } catch (err) {
+    console.error('[Health Detailed] Failed to fetch detailed health status:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch detailed health report',
+      code: 'HEALTH_DETAILED_FAILED'
+    });
+  }
+});
+
+
 // Save global cookies permanently on the server
 app.post('/api/settings/cookies', (req, res) => {
   const { cookies } = req.body;
   if (!cookies || !cookies.trim()) {
-    return res.status(400).json({ error: 'Cookies content cannot be empty.' });
+    return res.status(400).json({ success: false, error: 'Cookies content cannot be empty.', code: 'INVALID_COOKIES' });
   }
 
   try {
@@ -840,7 +1271,7 @@ app.post('/api/settings/cookies', (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[Settings] Failed to write global cookies file:', err);
-    res.status(500).json({ error: `Failed to write cookies file on server: ${err.message}` });
+    res.status(500).json({ success: false, error: `Failed to write cookies file on server: ${err.message}`, code: 'COOKIE_WRITE_FAILED' });
   }
 });
 
@@ -854,7 +1285,7 @@ app.delete('/api/settings/cookies', (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[Settings] Failed to delete global cookies file:', err);
-    res.status(500).json({ error: `Failed to purge cookies file on server: ${err.message}` });
+    res.status(500).json({ success: false, error: `Failed to purge cookies file on server: ${err.message}`, code: 'COOKIE_DELETE_FAILED' });
   }
 });
 
@@ -922,6 +1353,29 @@ const errorCache = new Map();
 function sendTelegramAlert(stage, url, quality, format_id, errorMessage, jobId = 'N/A') {
   // 1. Sanitize the error message first
   const rawMsg = errorMessage || 'Unknown error';
+  
+  // Filter out alerts for routine errors (validation failures, rate limits, bad requests, client aborts)
+  const lowerMsg = rawMsg.toLowerCase();
+  const isRoutineError = 
+    lowerMsg.includes('private video') ||
+    lowerMsg.includes('video is private') ||
+    lowerMsg.includes('video unavailable') ||
+    lowerMsg.includes('is unavailable') ||
+    lowerMsg.includes('has been removed') ||
+    lowerMsg.includes('copyright') ||
+    lowerMsg.includes('rate limit') ||
+    lowerMsg.includes('too many requests') ||
+    lowerMsg.includes('abort') ||
+    lowerMsg.includes('sigkill') ||
+    lowerMsg.includes('econnreset') ||
+    lowerMsg.includes('closed') ||
+    lowerMsg.includes('connection reset');
+
+  if (isRoutineError) {
+    console.log(`[Telegram Alert] Suppressed routine alert: stage=${stage}, error=${rawMsg.substring(0, 80).replace(/\n/g, ' ')}`);
+    return;
+  }
+
   const sanitized = rawMsg
     // A. Redact HTTP and Netscape cookies for sensitive YouTube auth keys
     .replace(/(?:SID|HSID|SSID|APISID|SAPISID|LOGIN_INFO|VISITOR_INFO1_LIVE|YSC|__Secure-[a-zA-Z0-9\-_]+)\b(?:=|\t|\s+)[^\s;\t]+/gi, '[redacted]')
@@ -1017,11 +1471,7 @@ app.get('/api/download/:fileId', (req, res) => {
   console.log(`[Delivery] Serving clip (fileId: ${fileId}) to client`);
   
   res.download(filePath, `CropTube_Clip_${fileId}${ext}`, (err) => {
-    if (err) {
-      console.error(`[Delivery] Error downloading file:`, err);
-      sendTelegramAlert('Delivery - Download Error', 'N/A', 'N/A', 'N/A', err.message, fileId);
-    }
-    // Delete file immediately after response closes
+    // Delete file immediately after response closes (always run cleanup)
     try {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
@@ -1029,6 +1479,14 @@ app.get('/api/download/:fileId', (req, res) => {
       }
     } catch (unlinkErr) {
       console.error('[Delivery] Error deleting file:', unlinkErr);
+    }
+
+    if (err) {
+      // Avoid Telegram alert on standard user cancel / abort
+      if (err.code !== 'ECONNRESET' && !err.message?.includes('aborted')) {
+        console.error(`[Delivery] Error downloading file:`, err);
+        sendTelegramAlert('Delivery - Download Error', 'N/A', 'N/A', 'N/A', err.message, fileId);
+      }
     }
   });
   } catch (err) {
