@@ -106,7 +106,7 @@ function getFileResolution(filePath) {
 }
 // ─── Phase 7 Centralized Configuration & Utilities ──────────────────────────
 const CONFIG = {
-  MAX_CONCURRENT_EXTRACTIONS: 3,
+  MAX_CONCURRENT_EXTRACTIONS: 1, // Single-extraction mode for Render Free tier memory stability
   MAX_CLIP_DURATION: 600, // 10 minutes (in seconds)
   JOB_EXPIRY_MS: 15 * 60 * 1000 // 15 minutes
 };
@@ -775,10 +775,10 @@ app.post('/api/extract/initiate', extractLimiter, (req, res) => {
     // 1. Concurrent Extraction Protection
     const currentActiveCount = getActiveExtractionsCount();
     if (currentActiveCount >= CONFIG.MAX_CONCURRENT_EXTRACTIONS) {
-      console.warn(`[Extraction Limit] Rejected request. Active extractions count: ${currentActiveCount}`);
-      return res.status(503).json({
+      console.warn(`[Concurrency] Rejected extraction request: active extraction already running. Active count: ${currentActiveCount}`);
+      return res.status(429).json({
         success: false,
-        error: 'Server is currently busy. Please wait for existing extraction jobs to complete.',
+        error: 'Another extraction is currently running. Please wait until it finishes.',
         code: 'SERVER_BUSY'
       });
     }

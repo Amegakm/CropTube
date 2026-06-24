@@ -679,7 +679,9 @@ export default function App() {
   const [logs, setLogs] = useState([]);
   const [autoScroll, setAutoScroll] = useState(true);
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
+  const [showAdvancedDiagnostics, setShowAdvancedDiagnostics] = useState(false);
   const [retryPayload, setRetryPayload] = useState(null);
+  const [serverBusy, setServerBusy] = useState(false);
   const [extractedFileId, setExtractedFileId] = useState('');
 
   const playerRef = useRef(null);
@@ -1037,8 +1039,10 @@ export default function App() {
     setStatusMessage('Preparing clip...');
     setExtractionFailed(false);
     setExtractionComplete(false);
+    setServerBusy(false);
     setLastError('');
     setRetryPayload(targetPayload);
+    setShowAdvancedDiagnostics(false);
 
     setLogs([
       { text: `[system] Initiating extraction job for video: ${videoId}`, type: 'system' },
@@ -1057,7 +1061,12 @@ export default function App() {
         const text = await r.text();
         let d;
         try { d = JSON.parse(text); } catch (_) { throw new Error(`Server returned invalid response (${r.status}): ${text.slice(0, 200)}`); }
-        if (!r.ok) throw new Error(d.error || `Server error ${r.status}`);
+        if (!r.ok) {
+          // Attach code to error message so catch block can detect SERVER_BUSY
+          const err = new Error(d.error || `Server error ${r.status}`);
+          if (d.code) err.message = `${d.code}: ${err.message}`;
+          throw err;
+        }
         return d;
       })
       .then(({ fileId }) => {
@@ -1170,12 +1179,24 @@ export default function App() {
         };
       })
       .catch(err => {
-        setExtractionFailed(true);
-        setLastError(err.message || 'Unable to initiate clip extraction. Please try again.');
-        setStatusMessage('');
-        setExtracting(false);
-        setCurrentStep(0);
-        setLogs(prev => [...prev, { text: `[error] Fetch initiation failed: ${err.message || err}`, type: 'error' }]);
+        // Detect SERVER_BUSY specifically
+        const errText = err.message || '';
+        if (errText.includes('SERVER_BUSY') || errText.includes('Another extraction is currently running')) {
+          setServerBusy(true);
+          setExtractionFailed(false);
+          setLastError('');
+          setStatusMessage('');
+          setExtracting(false);
+          setCurrentStep(0);
+          setLogs(prev => [...prev, { text: `[info] Server busy — another extraction is already running.`, type: 'info' }]);
+        } else {
+          setExtractionFailed(true);
+          setLastError(err.message || 'Unable to initiate clip extraction. Please try again.');
+          setStatusMessage('');
+          setExtracting(false);
+          setCurrentStep(0);
+          setLogs(prev => [...prev, { text: `[error] Fetch initiation failed: ${err.message || err}`, type: 'error' }]);
+        }
       });
   };
 
@@ -1883,6 +1904,43 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Case E: Server Busy Card */}
+                {serverBusy && !extracting && !extractionComplete && !extractionFailed && (
+                  <div className="w-full bg-amber-950/20 border border-amber-500/25 rounded-2xl p-6 text-center space-y-4 shadow-xl animate-fade-in">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                      <Loader2 className="w-6 h-6" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="font-display font-800 text-base text-white">⏳ Extraction Queue Full</h3>
+                      <p className="text-xs text-amber-300 px-4 leading-relaxed font-semibold">
+                        Another extraction is already in progress.
+                      </p>
+                      <p className="text-xs text-slate-500 px-4 leading-relaxed">
+                        Please wait until it finishes, then try again.
+                      </p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2.5 max-w-sm mx-auto">
+                      <button
+                        onClick={() => handleExtract(retryPayload)}
+                        className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-95"
+                      >
+                        <RefreshCw className="w-4 h-4" /> Try Again
+                      </button>
+                      <button
+                        onClick={() => {
+                          setServerBusy(false);
+                          setLogs([]);
+                          setProgress(0);
+                          setStatusMessage('');
+                        }}
+                        className="py-3 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Case C: Active Extraction (Progress Card) */}
                 {extracting && !extractionComplete && !extractionFailed && (
                   <div className="w-full bg-slate-900/50 border border-slate-800/80 rounded-2xl p-5 space-y-4 shadow-inner">
@@ -1978,75 +2036,90 @@ export default function App() {
                   </button>
                 )}
 
-                {/* Log Viewer Panel (Visible during or after extraction/errors) */}
-                {(extracting || extractionFailed || extractionComplete || logs.length > 0) && (
-                  <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl shadow-xl overflow-hidden flex flex-col h-[260px] animate-fade-in">
-                    <div className="bg-slate-950 px-4 py-2.5 border-b border-slate-900 flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                        <span className="text-[10px] font-mono font-bold text-slate-300">yt-dlp_agent@croptube:~$</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 text-[10px]">
-                        <label className="flex items-center gap-1 cursor-pointer text-slate-500 hover:text-slate-300 font-mono text-[9px] select-none">
-                          <input
-                            type="checkbox"
-                            checked={autoScroll}
-                            onChange={(e) => setAutoScroll(e.target.checked)}
-                            className="accent-indigo-500 w-3 h-3 bg-slate-900 border-slate-800 rounded"
-                          />
-                          Auto-Scroll
-                        </label>
-                        <span className="text-slate-800">|</span>
-                        <button
-                          onClick={() => {
-                            const rawText = logs.map(l => l.text).join('\n');
-                            navigator.clipboard.writeText(rawText)
-                              .then(() => alert('📋 Logs copied to clipboard!'))
-                              .catch(() => alert('Failed to copy logs.'));
-                          }}
-                          disabled={logs.length === 0}
-                          className="text-[9px] font-mono text-slate-400 hover:text-white disabled:opacity-40 transition-colors"
-                        >
-                          Copy
-                        </button>
-                        <span className="text-slate-800">|</span>
-                        <button
-                          onClick={() => setLogs([])}
-                          disabled={logs.length === 0}
-                          className="text-[9px] font-mono text-rose-400/80 hover:text-rose-300 disabled:opacity-40 transition-colors"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
+                {/* Advanced Diagnostics — Collapsible Log Viewer */}
+                {(extracting || extractionFailed || extractionComplete || serverBusy || logs.length > 0) && (
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => setShowAdvancedDiagnostics(v => !v)}
+                      className="w-full flex justify-between items-center px-3 py-2 bg-slate-950/60 border border-slate-900 hover:border-slate-800 rounded-lg text-[10px] font-mono text-slate-500 hover:text-slate-300 transition-all"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${extracting ? 'bg-indigo-500 animate-pulse' : extractionFailed ? 'bg-rose-500' : extractionComplete ? 'bg-emerald-500' : 'bg-slate-700'}`} />
+                        {showAdvancedDiagnostics ? '▼ Hide Advanced Diagnostics' : '▶ Advanced Diagnostics'}
+                      </span>
+                      <span className="text-[8px] text-slate-600 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded font-mono">{logs.length} log lines</span>
+                    </button>
 
-                    {/* Logs terminal contents */}
-                    <div className="flex-1 p-3.5 bg-black/60 font-mono text-[10px] overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 select-text">
-                      {logs.length === 0 ? (
-                        <p className="text-slate-700 italic text-center pt-8">Terminal logs stream waiting...</p>
-                      ) : (
-                        logs.map((log, index) => {
-                          let colorClass = 'text-slate-400';
-                          if (log.type === 'error') {
-                            colorClass = 'text-rose-400 bg-rose-950/15 border-l-2 border-rose-500 pl-2 py-0.5';
-                          } else if (log.type === 'success') {
-                            colorClass = 'text-emerald-400 font-semibold bg-emerald-950/15 border-l-2 border-emerald-500 pl-2 py-0.5';
-                          } else if (log.type === 'system') {
-                            colorClass = 'text-indigo-400 font-semibold border-l-2 border-indigo-500 pl-2';
-                          } else if (log.text.includes('%')) {
-                            colorClass = 'text-indigo-300';
-                          }
+                    {showAdvancedDiagnostics && (
+                      <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl shadow-xl overflow-hidden flex flex-col h-[260px] animate-fade-in">
+                        <div className="bg-slate-950 px-4 py-2.5 border-b border-slate-900 flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                            <span className="text-[10px] font-mono font-bold text-slate-300">yt-dlp_agent@croptube:~$</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 text-[10px]">
+                            <label className="flex items-center gap-1 cursor-pointer text-slate-500 hover:text-slate-300 font-mono text-[9px] select-none">
+                              <input
+                                type="checkbox"
+                                checked={autoScroll}
+                                onChange={(e) => setAutoScroll(e.target.checked)}
+                                className="accent-indigo-500 w-3 h-3 bg-slate-900 border-slate-800 rounded"
+                              />
+                              Auto-Scroll
+                            </label>
+                            <span className="text-slate-800">|</span>
+                            <button
+                              onClick={() => {
+                                const rawText = logs.map(l => l.text).join('\n');
+                                navigator.clipboard.writeText(rawText)
+                                  .then(() => alert('📋 Logs copied to clipboard!'))
+                                  .catch(() => alert('Failed to copy logs.'));
+                              }}
+                              disabled={logs.length === 0}
+                              className="text-[9px] font-mono text-slate-400 hover:text-white disabled:opacity-40 transition-colors"
+                            >
+                              Copy
+                            </button>
+                            <span className="text-slate-800">|</span>
+                            <button
+                              onClick={() => setLogs([])}
+                              disabled={logs.length === 0}
+                              className="text-[9px] font-mono text-rose-400/80 hover:text-rose-300 disabled:opacity-40 transition-colors"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
 
-                          return (
-                            <div key={index} className={`leading-relaxed break-all font-mono ${colorClass}`}>
-                              {log.text}
-                            </div>
-                          );
-                        })
-                      )}
-                      <div ref={terminalEndRef} />
-                    </div>
+                        {/* Logs terminal contents */}
+                        <div className="flex-1 p-3.5 bg-black/60 font-mono text-[10px] overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 select-text">
+                          {logs.length === 0 ? (
+                            <p className="text-slate-700 italic text-center pt-8">Terminal logs stream waiting...</p>
+                          ) : (
+                            logs.map((log, index) => {
+                              let colorClass = 'text-slate-400';
+                              if (log.type === 'error') {
+                                colorClass = 'text-rose-400 bg-rose-950/15 border-l-2 border-rose-500 pl-2 py-0.5';
+                              } else if (log.type === 'success') {
+                                colorClass = 'text-emerald-400 font-semibold bg-emerald-950/15 border-l-2 border-emerald-500 pl-2 py-0.5';
+                              } else if (log.type === 'system') {
+                                colorClass = 'text-indigo-400 font-semibold border-l-2 border-indigo-500 pl-2';
+                              } else if (log.text.includes('%')) {
+                                colorClass = 'text-indigo-300';
+                              }
+
+                              return (
+                                <div key={index} className={`leading-relaxed break-all font-mono ${colorClass}`}>
+                                  {log.text}
+                                </div>
+                              );
+                            })
+                          )}
+                          <div ref={terminalEndRef} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
