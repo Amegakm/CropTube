@@ -500,7 +500,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
 
       {/* ── HOW IT WORKS ─────────────────────────────────────── */}
       <section id="how-it-works" className="px-4 sm:px-6 lg:px-8 py-20 max-w-5xl mx-auto">
-        <div className="text-center mb-14">
+        <div className="text-center mb-12">
           <h2 className="section-title text-3xl sm:text-4xl mb-3">How It Works</h2>
           <p className="text-slate-500 text-sm max-w-md mx-auto">
             Three steps from URL to clip. No logins, no installs.
@@ -1453,8 +1453,8 @@ export default function App() {
           <div className="flex items-center gap-2 sm:gap-2.5">
             <button
               onClick={() => setShowDashboard(false)}
+              aria-label="Return to home page"
               className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white/70 hover:text-white transition-all text-xs font-bold"
-              title="Return to Home Page"
             >
               ←
             </button>
@@ -1479,7 +1479,7 @@ export default function App() {
           <div className="bg-amber-950/40 border border-amber-500/40 rounded-xl p-3 text-[10px] text-amber-400 space-y-1 relative z-10">
             <div className="flex justify-between items-center font-bold">
               <span>⚠️ Cookies Expired</span>
-              <button onClick={() => setCookiesExpired(false)} className="text-amber-600 hover:text-amber-300">✕</button>
+              <button onClick={() => setCookiesExpired(false)} aria-label="Dismiss cookies expired warning" className="text-amber-600 hover:text-amber-300 transition-colors">✕</button>
             </div>
             <p className="text-[9px] text-amber-400/80 leading-normal">
               Export Netscape cookies from Chrome using extension and register them in Cloud Auth settings.
@@ -1538,7 +1538,7 @@ export default function App() {
                       <button
                         onClick={saveCookies}
                         disabled={!cookies.trim() || extracting}
-                        className="flex-1 py-2 rounded-lg text-[10px] font-bold transition-all
+                        className="flex-1 py-2.5 rounded-lg text-[10px] font-bold transition-all
                           bg-amber-600 hover:bg-amber-500 text-white
                           disabled:bg-slate-900 disabled:text-slate-600 disabled:cursor-not-allowed"
                       >
@@ -1548,7 +1548,7 @@ export default function App() {
                         <button
                           onClick={deleteCookies}
                           disabled={extracting}
-                          className="px-3 py-2 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40
+                          className="px-3 py-2.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40
                             text-rose-400 rounded-lg text-[10px] font-semibold transition-all"
                         >
                           Purge
@@ -1718,7 +1718,7 @@ export default function App() {
                 <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">5. Format &amp; Quality</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Format</span>
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Format</span>
                     <select
                       value={selectedFormat}
                       onChange={e => {
@@ -1749,7 +1749,7 @@ export default function App() {
                   </div>
 
                   <div className="space-y-1">
-                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Quality</span>
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Quality</span>
                     <select
                       value={selectedQuality}
                       onChange={e => setSelectedQuality(e.target.value)}
@@ -1792,8 +1792,8 @@ export default function App() {
               </div>
 
               {/* 6. DOWNLOAD / PROGRESS / SUCCESS / ERROR CARD */}
-              <div className="space-y-4 pt-2 border-t border-slate-900/40">
-                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">6. Download & Progress</label>
+              <div className="space-y-3 pt-1 border-t border-slate-900/40">
+                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">6. Download &amp; Progress</label>
 
                 {/* Case A: Success Card */}
                 {extractionComplete && (
@@ -1916,7 +1916,7 @@ export default function App() {
 
                 {/* Case C: Active Extraction (Progress Card) */}
                 {extracting && !extractionComplete && !extractionFailed && (
-                  <div className="w-full bg-slate-900/40 border border-slate-800/85 rounded-2xl p-5 space-y-4 shadow-xl animate-fade-in">
+                  <div className="w-full bg-slate-900/40 border border-slate-800/85 rounded-2xl p-4 space-y-4 shadow-xl animate-fade-in">
                     {/* Current Status */}
                     <div className="flex justify-between items-center text-xs">
                       <div className="flex items-center gap-2">
@@ -1985,19 +1985,19 @@ export default function App() {
 
                     {/* Metadata Grid (Quality, Duration, Est. Size) */}
                     <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-900/60 text-center">
-                      <div className="bg-slate-950/40 border border-slate-850 rounded-xl p-2">
+                      <div className="bg-slate-950/40 border border-slate-800/60 rounded-xl p-2">
                         <span className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold">Quality</span>
                         <span className="text-xs font-semibold text-slate-200 mt-0.5 block">
                           {retryPayload?.quality || selectedQuality} ({ (retryPayload?.format || selectedFormat).toUpperCase() })
                         </span>
                       </div>
-                      <div className="bg-slate-950/40 border border-slate-850 rounded-xl p-2">
+                      <div className="bg-slate-950/40 border border-slate-800/60 rounded-xl p-2">
                         <span className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold">Duration</span>
                         <span className="text-xs font-semibold text-slate-200 mt-0.5 block">
                           {secsToHMS(retryPayload ? (hmsToSecs(retryPayload.end) - hmsToSecs(retryPayload.start)) : clipLen)}
                         </span>
                       </div>
-                      <div className="bg-slate-950/40 border border-slate-850 rounded-xl p-2">
+                      <div className="bg-slate-950/40 border border-slate-800/60 rounded-xl p-2">
                         <span className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold">Est. Size</span>
                         <span className="text-xs font-semibold text-indigo-400 mt-0.5 block">
                           {estimateOutputSize(
@@ -2016,7 +2016,7 @@ export default function App() {
                   <button
                     onClick={() => handleExtract()}
                     disabled={!videoId || clipLen <= 0 || selectedFormatId === 'none' || selectedFormatId === '' || isLoadingFormats}
-                    className={`w-full py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all duration-200
+                    className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all duration-200
                       ${!videoId || clipLen <= 0 || selectedFormatId === 'none' || selectedFormatId === '' || isLoadingFormats
                         ? 'bg-slate-900/40 text-slate-600 border border-slate-900 cursor-not-allowed'
                         : 'bg-white hover:bg-slate-100 text-slate-950 shadow-lg hover:scale-[1.01] active:scale-[0.99]'
@@ -2026,9 +2026,9 @@ export default function App() {
                     Extract &amp; Download Clip
                   </button>
                 )}
-                                {/* Advanced Diagnostics — Collapsible Log Viewer */}
+                              {/* Advanced Diagnostics — Collapsible Log Viewer */}
                 {(extracting || extractionFailed || extractionComplete || serverBusy || logs.length > 0) && (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <button
                       onClick={() => setShowAdvancedDiagnostics(v => !v)}
                       className="w-full flex justify-between items-center px-3 py-2 bg-slate-950/60 border border-slate-900 hover:border-slate-800 rounded-lg text-[10px] font-mono text-slate-500 hover:text-slate-300 transition-all"
@@ -2240,7 +2240,7 @@ export default function App() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-1.5 pt-2.5 border-t border-slate-900 mt-auto">
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-slate-900 mt-auto">
                       <button
                         onClick={() => handleReloadSettings(item)}
                         className="flex-1 py-2 bg-indigo-950/45 hover:bg-indigo-900/60 border border-indigo-900/50 hover:border-indigo-700/50 text-indigo-300 hover:text-indigo-100 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1"
