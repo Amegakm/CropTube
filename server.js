@@ -454,6 +454,7 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
       console.error(`[Formats] yt-dlp failed with exit code ${code}: ${stderrData}`);
       
       const isBot = stderrData.includes("Sign in to confirm you're not a bot") || 
+                    stderrData.includes("Sign in to confirm you’re not a bot") || 
                     stderrData.includes("Sign in to confirm your age");
       
       const errorMsg = isBot
@@ -1175,6 +1176,7 @@ app.get('/api/extract/stream', async (req, res) => {
       console.error(`[Extract] Process terminated (code ${code}). Output exists: ${fs.existsSync(outputPath)}`);
       
       const isCookieError = stderrBuffer.includes("Sign in to confirm you're not a bot") ||
+                            stderrBuffer.includes("Sign in to confirm you’re not a bot") ||
                             stderrBuffer.includes('Sign in to confirm your age') ||
                             stderrBuffer.includes('cookies have');
       
