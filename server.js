@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import https from 'https';
 import { fileURLToPath } from 'url';
-import { spawn, execSync } from 'child_process';
+import { spawn, execSync, exec } from 'child_process';
 import ffmpegStatic from 'ffmpeg-static';
 
 // Initialize __dirname for ES Modules
@@ -104,6 +104,59 @@ function getFileResolution(filePath) {
     return 'error';
   }
 }
+// ─── Phase 8 Custom Intercepted Logger ──────────────────────────────────────
+const logBuffer = [];
+let lastCookieUsedTime = null;
+
+function sanitizeLogMessage(msg) {
+  if (msg === undefined || msg === null) return '';
+  if (typeof msg !== 'string') {
+    try {
+      msg = typeof msg === 'object' ? JSON.stringify(msg) : String(msg);
+    } catch (_) {
+      msg = String(msg);
+    }
+  }
+  return msg
+    // Redact HTTP and Netscape cookies
+    .replace(/(?:SID|HSID|SSID|APISID|SAPISID|LOGIN_INFO|VISITOR_INFO1_LIVE|YSC|__Secure-[a-zA-Z0-9\-_]+)\b(?:=|\t|\s+)[^\s;\t]+/gi, '[redacted]')
+    .replace(/^(?:(?!\s).)*youtube\.com\s+[\w]+\s+\/\s+[\w]+\s+\d+\s+(?:SID|HSID|SSID|APISID|SAPISID|LOGIN_INFO|VISITOR_INFO1_LIVE|YSC|__Secure-[a-zA-Z0-9\-_]+)\s+[^\r\n]+/gm, '[redacted_netscape_cookie_line]')
+    // Redact Windows absolute paths
+    .replace(/[A-Za-z]:\\[\w\s.\-_\\+]+/g, '[path]')
+    // Redact Unix and absolute paths
+    .replace(/\/[\w.\-_\\+]+/g, '[path]')
+    // Redact IP addresses
+    .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '[ip]')
+    // Redact long auth tokens / base64 strings (40+ characters)
+    .replace(/[A-Za-z0-9+/=]{40,}/g, '[redacted]');
+}
+
+function appLogger(level, source, message) {
+  const timestamp = new Date().toISOString();
+  const sanitized = sanitizeLogMessage(message);
+  
+  logBuffer.push({
+    timestamp,
+    level,
+    source,
+    message: sanitized
+  });
+  
+  if (logBuffer.length > 100) {
+    logBuffer.shift();
+  }
+  
+  // Format console output
+  const consoleMsg = `[${level.toUpperCase()}] [${source}] ${sanitized}`;
+  if (level === 'error') {
+    console.error(consoleMsg);
+  } else if (level === 'warn') {
+    console.warn(consoleMsg);
+  } else {
+    console.log(consoleMsg);
+  }
+}
+
 // ─── Phase 7 Centralized Configuration & Utilities ──────────────────────────
 const CONFIG = {
   MAX_CONCURRENT_EXTRACTIONS: 1, // Single-extraction mode for Render Free tier memory stability
@@ -321,6 +374,9 @@ function getCommonArgsConfig(quality = '', customCookiePath = null) {
 
   if (hasValidCookies) {
     args.push('--cookies', cookiePath);
+    if (!customCookiePath) {
+      lastCookieUsedTime = Date.now();
+    }
   }
 
   return { args, playerClient, cookieExists, cookieSize };
@@ -451,7 +507,7 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
 
   child.on('close', (code) => {
     if (code !== 0) {
-      console.error(`[Formats] yt-dlp failed with exit code ${code}: ${stderrData}`);
+      appLogger('error', 'Formats', `yt-dlp failed with exit code ${code}: ${stderrData}`);
       
       const isBot = stderrData.includes("Sign in to confirm you're not a bot") || 
                     stderrData.includes("Sign in to confirm you’re not a bot") || 
@@ -473,6 +529,7 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
     }
 
     try {
+      appLogger('info', 'Formats', `Successfully resolved formats for video ${url}`);
       const parsed = JSON.parse(stdoutData);
       const formats = parsed.formats || [];
       
@@ -652,7 +709,7 @@ const sweepStats = {
 
 function runStaleFileSweeper() {
   try {
-    console.log('[Sweeper] Starting stale file sweep...');
+    appLogger('info', 'Sweeper', 'Starting stale file sweep...');
     if (!fs.existsSync(tempDir)) {
       return;
     }
@@ -684,7 +741,7 @@ function runStaleFileSweeper() {
         
         // 3. Active Job Guard: Verify file is not associated with an active job in the Map
         if (fileId && activeJobs.has(fileId)) {
-          console.log(`[Sweeper] Skipping file ${file} because Job ${fileId} is currently active.`);
+          appLogger('info', 'Sweeper', `Skipping file ${file} because Job ${fileId} is currently active.`);
           return;
         }
         
@@ -693,10 +750,10 @@ function runStaleFileSweeper() {
         if (ageMs > 30 * 60 * 1000) {
           fs.unlinkSync(filePath);
           filesDeleted++;
-          console.log(`[Sweeper] Deleted stale file: ${file} (age: ${Math.round(ageMs / 1000 / 60)}m)`);
+          appLogger('info', 'Sweeper', `Deleted stale file: ${file} (age: ${Math.round(ageMs / 1000 / 60)}m)`);
         }
       } catch (fileErr) {
-        console.error(`[Sweeper] Error processing file ${file}:`, fileErr);
+        appLogger('error', 'Sweeper', `Error processing file ${file}: ${fileErr.message}`);
         sweepStats.errorsCount++;
       }
     });
@@ -704,9 +761,9 @@ function runStaleFileSweeper() {
     sweepStats.totalSweepsRun++;
     sweepStats.totalFilesDeleted += filesDeleted;
     sweepStats.lastSweepTime = new Date().toISOString();
-    console.log(`[Sweeper] Sweep completed. Deleted ${filesDeleted} file(s).`);
+    appLogger('info', 'Sweeper', `Sweep completed. Deleted ${filesDeleted} file(s).`);
   } catch (err) {
-    console.error('[Sweeper] Sweeper failed:', err);
+    appLogger('error', 'Sweeper', `Sweeper failed: ${err.message}`);
     sweepStats.errorsCount++;
   }
 }
@@ -875,6 +932,18 @@ app.get('/api/extract/stream', async (req, res) => {
   }, 20000);
 
   const logToClient = (type, message) => {
+    // Phase 8 stage tracking
+    const currentJob = activeJobs.get(fileId);
+    if (currentJob) {
+      if (type === 'status') {
+        currentJob.stage = message;
+      } else if (type === 'progress' && message) {
+        currentJob.stage = message.stage;
+        currentJob.progress = message.pct;
+      } else if (type === 'error') {
+        currentJob.stage = `error: ${message}`;
+      }
+    }
     if (!res.writableEnded) {
       res.write(`data: ${JSON.stringify({ type, message })}\n\n`);
       if (typeof res.flush === 'function') res.flush();
@@ -921,11 +990,11 @@ app.get('/api/extract/stream', async (req, res) => {
   let outputFilename = `croptube_${fileId}.${targetFormat === 'webm-audio' ? 'webm' : targetFormat}`;
   const outputPath = path.join(tempDir, outputFilename);
 
-  console.log(`[Extract] Starting: quality=${quality}, format_id=${format_id || 'none'}`);
+  appLogger('info', 'Extract', `Starting job ${fileId}: url=${url}, quality=${quality}, format_id=${format_id || 'none'}`);
 
   // format_id is required — refuse extraction if missing
   if (!format_id || format_id === 'none') {
-    console.error(`[Extract] Missing format_id — aborting.`);
+    appLogger('error', 'Extract', `Missing format_id for job ${fileId} — aborting.`);
     logToClient('error', 'Unable to fetch video information. Please reload and try again.');
     clearInterval(keepaliveInterval);
     return res.end();
@@ -1087,10 +1156,13 @@ app.get('/api/extract/stream', async (req, res) => {
     // Update status in activeJobs
     if (isCompletedSuccessfully) {
       job.status = 'completed';
+      appLogger('info', 'Extract', `Job ${fileId} completed successfully.`);
     } else if (errType === 'abort') {
       job.status = 'aborted';
+      appLogger('info', 'Extract', `Job ${fileId} aborted.`);
     } else {
       job.status = 'failed';
+      appLogger('error', 'Extract', `Job ${fileId} failed.`);
     }
 
     if (child && !child.killed) {
@@ -1505,6 +1577,473 @@ function sendTelegramAlert(stage, url, quality, format_id, errorMessage, jobId =
   tgReq.end();
 }
 
+// ─── Phase 8 Telegram Polling Bot & Remote Management ───────────────────────
+const userStates = new Map();
+
+function sendTelegramMessage(chatId, text, replyToMessageId = null) {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) return;
+
+  const payloadObj = {
+    chat_id: chatId,
+    text: text,
+    parse_mode: 'Markdown'
+  };
+  if (replyToMessageId) {
+    payloadObj.reply_to_message_id = replyToMessageId;
+  }
+
+  const payload = JSON.stringify(payloadObj);
+  const options = {
+    hostname: 'api.telegram.org',
+    path: `/bot${botToken}/sendMessage`,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload)
+    }
+  };
+
+  const tgReq = https.request(options, (tgRes) => {
+    let data = '';
+    tgRes.on('data', chunk => { data += chunk; });
+    tgRes.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        if (!parsed.ok && parsed.description?.includes("can't parse")) {
+          // Retry without Markdown if parsing fails
+          delete payloadObj.parse_mode;
+          const fallbackPayload = JSON.stringify(payloadObj);
+          const fbOptions = {
+            ...options,
+            headers: {
+              ...options.headers,
+              'Content-Length': Buffer.byteLength(fallbackPayload)
+            }
+          };
+          const fbReq = https.request(fbOptions);
+          fbReq.write(fallbackPayload);
+          fbReq.end();
+        }
+      } catch (_) {}
+    });
+  });
+
+  tgReq.on('error', (err) => console.error(`[Telegram Bot] Send message failed: ${err.message}`));
+  tgReq.write(payload);
+  tgReq.end();
+}
+
+function isAuthorized(message) {
+  const adminChatId = process.env.TELEGRAM_CHAT_ID;
+  if (!adminChatId) return false;
+
+  const senderId = message.from && message.from.id;
+  const chatId = message.chat && message.chat.id;
+
+  const allowedIds = [adminChatId.toString().trim()];
+  if (process.env.TELEGRAM_ADMIN_IDS) {
+    process.env.TELEGRAM_ADMIN_IDS.split(',').forEach(id => {
+      allowedIds.push(id.trim());
+    });
+  }
+
+  const isSenderAllowed = senderId && allowedIds.includes(senderId.toString());
+  const isChatAllowed = chatId && allowedIds.includes(chatId.toString());
+
+  return isSenderAllowed || isChatAllowed;
+}
+
+function isValidNetscapeCookie(content) {
+  if (!content || typeof content !== 'string') return false;
+  const trimmed = content.trim();
+  if (trimmed.length === 0) return false;
+  
+  // 1. Check for Netscape HTTP Cookie File header
+  if (!trimmed.startsWith('# Netscape HTTP Cookie File') && !trimmed.startsWith('# Netscape')) {
+    return false;
+  }
+  
+  // 2. Minimum required cookie fields: check if there's at least one line with 7 tab-separated columns
+  const lines = trimmed.split('\n');
+  let hasValidRecord = false;
+  for (const line of lines) {
+    const cleanLine = line.trim();
+    if (!cleanLine || cleanLine.startsWith('#')) continue;
+    const parts = cleanLine.split('\t');
+    if (parts.length >= 7) {
+      hasValidRecord = true;
+      break;
+    }
+  }
+  
+  return hasValidRecord;
+}
+
+function downloadTelegramFile(fileId) {
+  return new Promise((resolve, reject) => {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    https.get(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.ok && parsed.result && parsed.result.file_path) {
+            const filePath = parsed.result.file_path;
+            https.get(`https://api.telegram.org/file/bot${botToken}/${filePath}`, (fileRes) => {
+              let fileData = '';
+              fileRes.on('data', chunk => fileData += chunk);
+              fileRes.on('end', () => {
+                resolve(fileData);
+              });
+            }).on('error', reject);
+          } else {
+            reject(new Error(parsed.description || 'Failed to get file path from Telegram'));
+          }
+        } catch (e) {
+          reject(e);
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+function formatDuration(sec) {
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  const remainingSec = sec % 60;
+  if (min < 60) return `${min}m ${remainingSec}s`;
+  const hr = Math.floor(min / 60);
+  const remainingMin = min % 60;
+  if (hr < 24) return `${hr}h ${remainingMin}m`;
+  const day = Math.floor(hr / 24);
+  const remainingHr = hr % 24;
+  return `${day}d ${remainingHr}h`;
+}
+
+async function handleTelegramUpdate(update) {
+  const message = update.message;
+  if (!message) return;
+
+  const chatId = message.chat && message.chat.id;
+  if (!chatId) return;
+
+  // 1. Authentication & Security
+  if (!isAuthorized(message)) {
+    console.warn(`[Telegram Bot] Unauthorized message from chat ID: ${chatId}`);
+    return;
+  }
+
+  const text = message.text ? message.text.trim() : '';
+
+  // Check state
+  const state = userStates.get(chatId);
+  if (state === 'awaiting_cookie_file') {
+    if (message.document) {
+      const doc = message.document;
+      const isTextFile = doc.mime_type?.startsWith('text/') || doc.file_name?.endsWith('.txt');
+      if (!isTextFile) {
+        sendTelegramMessage(chatId, "❌ Upload rejected: File must be a plain text file.");
+        userStates.delete(chatId);
+        return;
+      }
+      
+      // Maximum file size limit: 1 MB
+      if (doc.file_size > 1024 * 1024) {
+        sendTelegramMessage(chatId, "❌ Upload rejected: File size exceeds the 1 MB limit.");
+        userStates.delete(chatId);
+        return;
+      }
+
+      sendTelegramMessage(chatId, "📥 Downloading and validating cookie file...");
+      try {
+        const fileContent = await downloadTelegramFile(doc.file_id);
+        if (!isValidNetscapeCookie(fileContent)) {
+          sendTelegramMessage(chatId, "❌ Invalid Netscape cookies file. Upload rejected.");
+        } else {
+          // Backup
+          let backupCreated = false;
+          if (fs.existsSync(globalCookiePath)) {
+            try {
+              fs.copyFileSync(globalCookiePath, globalCookiePath + '.bak');
+              backupCreated = true;
+            } catch (backupErr) {
+              appLogger('error', 'Telegram Bot', `Failed to backup cookies: ${backupErr.message}`);
+            }
+          }
+          
+          try {
+            fs.writeFileSync(globalCookiePath, fileContent, 'utf8');
+            appLogger('info', 'Telegram Bot', `New global cookies file uploaded and registered via Telegram.`);
+            sendTelegramMessage(chatId, "✅ Cookies uploaded and registered successfully. Previous global_cookies.txt backed up to global_cookies.txt.bak.");
+          } catch (writeErr) {
+            appLogger('error', 'Telegram Bot', `Failed to write new cookies: ${writeErr.message}`);
+            if (backupCreated) {
+              try {
+                fs.copyFileSync(globalCookiePath + '.bak', globalCookiePath);
+                sendTelegramMessage(chatId, "❌ Write failed. Automatically restored previous cookies from backup.");
+              } catch (restoreErr) {
+                sendTelegramMessage(chatId, `❌ Write failed and failed to restore backup: ${restoreErr.message}`);
+              }
+            } else {
+              sendTelegramMessage(chatId, `❌ Write failed: ${writeErr.message}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Telegram Bot] Error processing uploaded file:', err);
+        sendTelegramMessage(chatId, `❌ Error processing cookie file: ${err.message}`);
+      }
+      userStates.delete(chatId);
+      return;
+    } else {
+      // User sent text/command instead of file
+      userStates.delete(chatId);
+      // Fall through to normal commands
+    }
+  }
+
+  if (text.startsWith('/')) {
+    const parts = text.split(' ');
+    const command = parts[0].toLowerCase().split('@')[0];
+
+    switch (command) {
+      case '/status': {
+        const uptimeSec = Math.round(process.uptime());
+        const uptimeStr = formatDuration(uptimeSec);
+        const memory = process.memoryUsage();
+        const heapMB = Math.round(memory.heapUsed / 1024 / 1024);
+        const rssMB = Math.round(memory.rss / 1024 / 1024);
+        const cookiesExist = fs.existsSync(globalCookiePath);
+        let cookieSizeStr = 'N/A';
+        let cookieMtimeStr = 'N/A';
+        if (cookiesExist) {
+          try {
+            const stats = fs.statSync(globalCookiePath);
+            cookieSizeStr = `${stats.size} bytes`;
+            cookieMtimeStr = stats.mtime.toISOString();
+          } catch (_) {}
+        }
+        const ytDlpExists = !!ytdlpCmd && fs.existsSync(ytdlpCmd);
+        const ffmpegExists = !!resolvedFFmpegPath && fs.existsSync(resolvedFFmpegPath);
+        const lastUsedStr = lastCookieUsedTime ? new Date(lastCookieUsedTime).toISOString() : 'N/A';
+
+        const statusMsg = [
+          `📋 *CropTube Server Status*`,
+          `• *Uptime*: ${uptimeStr}`,
+          `• *Active Jobs*: ${getActiveExtractionsCount()}/${CONFIG.MAX_CONCURRENT_EXTRACTIONS}`,
+          `• *Queue Status*: No queue active`,
+          `• *Memory Usage*: HEAP ${heapMB} MB / RSS ${rssMB} MB`,
+          `• *Cookies Present*: ${cookiesExist ? 'Yes' : 'No'}`,
+          `• *Cookie Size*: ${cookieSizeStr}`,
+          `• *Last Cookie Upload*: ${cookieMtimeStr}`,
+          `• *Last Cookie Use*: ${lastUsedStr}`,
+          `• *yt-dlp*: ${ytDlpExists ? 'OK' : 'Not Found'}`,
+          `• *FFmpeg*: ${ffmpegExists ? 'OK' : 'Not Found'}`
+        ].join('\n');
+        sendTelegramMessage(chatId, statusMsg);
+        break;
+      }
+      case '/jobs': {
+        const activeJobEntries = Array.from(activeJobs.entries());
+        const runningJobs = activeJobEntries.filter(([_, j]) => j.status === 'running' || j.status === 'initiated');
+        if (runningJobs.length === 0) {
+          sendTelegramMessage(chatId, "No active extraction.");
+        } else {
+          const jobLines = runningJobs.map(([id, j]) => {
+            const elapsedSec = Math.round((Date.now() - j.createdAt) / 1000);
+            return [
+              `• *Job ID*: \`${id}\``,
+              `  *Stage*: ${j.stage || j.status}`,
+              `  *URL*: ${j.url}`,
+              `  *Started At*: ${new Date(j.createdAt).toISOString()}`,
+              `  *Elapsed*: ${formatDuration(elapsedSec)}`
+            ].join('\n');
+          });
+          sendTelegramMessage(chatId, `🏃 *Active Extractions*:\n\n${jobLines.join('\n\n')}`);
+        }
+        break;
+      }
+      case '/logs': {
+        if (logBuffer.length === 0) {
+          sendTelegramMessage(chatId, "Log buffer is empty.");
+        } else {
+          const recentLogs = logBuffer.slice(-30);
+          const formattedLogs = recentLogs.map(log => {
+            const time = new Date(log.timestamp).toISOString().substring(11, 19);
+            return `[${time}] [${log.level.toUpperCase()}] [${log.source}] ${log.message}`;
+          });
+          
+          const limit = 3800;
+          let currentChunk = '';
+          for (const line of formattedLogs) {
+            if ((currentChunk + line).length > limit) {
+              sendTelegramMessage(chatId, `\`\`\`\n${currentChunk}\`\`\``);
+              currentChunk = line + '\n';
+            } else {
+              currentChunk += line + '\n';
+            }
+          }
+          if (currentChunk.trim()) {
+            sendTelegramMessage(chatId, `\`\`\`\n${currentChunk}\`\`\``);
+          }
+        }
+        break;
+      }
+      case '/health': {
+        const ytDlpExists = !!ytdlpCmd && fs.existsSync(ytdlpCmd);
+        const ffmpegExists = !!resolvedFFmpegPath && fs.existsSync(resolvedFFmpegPath);
+        const cookiesExist = fs.existsSync(globalCookiePath);
+        const memory = process.memoryUsage();
+        const heapMB = Math.round(memory.heapUsed / 1024 / 1024);
+
+        const healthMsg = [
+          `✓ Server Online`,
+          `${ytDlpExists ? '✓' : '✗'} yt-dlp`,
+          `${ffmpegExists ? '✓' : '✗'} ffmpeg`,
+          `${cookiesExist ? '✓' : '✗'} Cookies`,
+          `✓ Memory (${heapMB}MB)`,
+          `✓ Active Jobs (${getActiveExtractionsCount()})`
+        ].join('\n');
+        sendTelegramMessage(chatId, healthMsg);
+        break;
+      }
+      case '/upload': {
+        userStates.set(chatId, 'awaiting_cookie_file');
+        sendTelegramMessage(chatId, "Send a Netscape cookies.txt file.");
+        break;
+      }
+      case '/remove': {
+        if (fs.existsSync(globalCookiePath)) {
+          try {
+            fs.unlinkSync(globalCookiePath);
+            appLogger('info', 'Telegram Bot', 'Global cookies file deleted via Telegram command.');
+            sendTelegramMessage(chatId, "🗑️ Global cookies deleted successfully.");
+          } catch (err) {
+            sendTelegramMessage(chatId, `❌ Failed to delete cookies: ${err.message}`);
+          }
+        } else {
+          sendTelegramMessage(chatId, "No global cookies file found to delete.");
+        }
+        break;
+      }
+      case '/cookieinfo': {
+        const cookiesExist = fs.existsSync(globalCookiePath);
+        if (!cookiesExist) {
+          sendTelegramMessage(chatId, "• *Cookies*: Absent");
+        } else {
+          try {
+            const stats = fs.statSync(globalCookiePath);
+            const lastUsedStr = lastCookieUsedTime ? new Date(lastCookieUsedTime).toISOString() : 'N/A';
+            const infoMsg = [
+              `🍪 *Cookie Info*`,
+              `• *Present/Absent*: Present`,
+              `• *Size*: ${stats.size} bytes`,
+              `• *Upload Time*: ${stats.mtime.toISOString()}`,
+              `• *Last Used Time*: ${lastUsedStr}`
+            ].join('\n');
+            sendTelegramMessage(chatId, infoMsg);
+          } catch (err) {
+            sendTelegramMessage(chatId, `❌ Failed to read cookie metadata: ${err.message}`);
+          }
+        }
+        break;
+      }
+      case '/testalert': {
+        sendTelegramMessage(chatId, "🔔 Sending a sample alert...");
+        sendTelegramAlert('Test Alert', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '1080p', 'mp4', 'This is a controlled diagnostic test alert.', 'test-job-id');
+        break;
+      }
+      case '/version': {
+        exec('git rev-parse --short HEAD', (gitErr, gitStdout) => {
+          const gitCommit = (!gitErr && gitStdout) ? gitStdout.trim() : 'N/A';
+          const verMsg = [
+            `ℹ️ *CropTube Version Info*`,
+            `• *CropTube Version*: 1.0.0`,
+            `• *Build Date*: 2026-07-05`,
+            `• *Git Commit*: ${gitCommit}`,
+            `• *Node Version*: ${process.version}`
+          ].join('\n');
+          sendTelegramMessage(chatId, verMsg);
+        });
+        break;
+      }
+      default:
+        sendTelegramMessage(chatId, "Unknown command. Available commands: /status, /jobs, /logs, /health, /upload, /remove, /cookieinfo, /testalert, /version");
+    }
+  }
+}
+
+let lastUpdateId = 0;
+let pollingErrorCount = 0;
+
+function startTelegramBotPolling() {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) {
+    console.log('[Telegram Bot] Bot token not configured. Remote administration disabled.');
+    return;
+  }
+
+  // 1. Single Polling Loop Guard
+  if (global.telegramPollingActive) {
+    console.log('[Telegram Bot] Polling already active. Skipping duplicate initialization.');
+    return;
+  }
+  global.telegramPollingActive = true;
+
+  console.log('[Telegram Bot] Starting remote administration polling...');
+  appLogger('info', 'System', 'Telegram Bot Remote Administration Polling started.');
+
+  async function poll() {
+    const url = `https://api.telegram.org/bot${botToken}/getUpdates?offset=${lastUpdateId + 1}&timeout=20`;
+    
+    const req = https.get(url, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', async () => {
+        try {
+          const body = JSON.parse(data);
+          if (body.ok && body.result) {
+            pollingErrorCount = 0; // Reset error count on successful communication
+            for (const update of body.result) {
+              lastUpdateId = Math.max(lastUpdateId, update.update_id);
+              try {
+                await handleTelegramUpdate(update);
+              } catch (updateErr) {
+                console.error('[Telegram Bot] Error handling update:', updateErr);
+              }
+            }
+          } else {
+            console.error('[Telegram Bot] Update returned non-ok:', body);
+            pollingErrorCount++;
+          }
+        } catch (err) {
+          console.error('[Telegram Bot] Error parsing updates:', err);
+          pollingErrorCount++;
+        }
+        
+        // Handle backoff or immediate retry
+        if (pollingErrorCount > 0) {
+          const delay = Math.min(10000 * Math.pow(2, pollingErrorCount - 1), 60000);
+          setTimeout(poll, delay);
+        } else {
+          setTimeout(poll, 1000);
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      console.error('[Telegram Bot] Polling network error:', err.message);
+      pollingErrorCount++;
+      const delay = Math.min(10000 * Math.pow(2, pollingErrorCount - 1), 60000);
+      setTimeout(poll, delay);
+    });
+  }
+
+  poll();
+}
+
 // Download Endpoint - Downloads clip then immediately cleans it up
 app.get('/api/download/:fileId', (req, res) => {
   try {
@@ -1571,4 +2110,7 @@ app.listen(PORT, () => {
   console.log(`  cookies: ${fs.existsSync(globalCookiePath) ? 'loaded ✓' : 'not found'}`);
   console.log(`  report: ${process.env.TELEGRAM_BOT_TOKEN ? 'configured ✓' : 'not configured'}`);
   console.log(`=================================================`);
+  
+  // Start bot updates polling
+  startTelegramBotPolling();
 });
