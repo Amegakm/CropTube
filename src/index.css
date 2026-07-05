@@ -115,10 +115,11 @@ select option {
    Navbar Glass
    ─────────────────────────────────────────────────────────── */
 .nav-glass {
-  background: rgba(2, 4, 10, 0.7);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  background: rgba(3, 6, 18, 0.88);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid rgba(255,255,255,0.09);
+  box-shadow: 0 1px 0 rgba(99,102,241,0.06);
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -188,9 +189,13 @@ select option {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 0% 0%, rgba(99,102,241,0.06) 0%, transparent 60%);
+  background: radial-gradient(
+    220px circle at var(--sx, -9999px) var(--sy, -9999px),
+    rgba(99,102,241,0.1) 0%,
+    transparent 80%
+  );
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.35s ease;
   border-radius: inherit;
   pointer-events: none;
 }
@@ -201,6 +206,10 @@ select option {
 }
 .bento-card:hover::before {
   opacity: 1;
+}
+/* Bento uses ::before for its own gradient — suppress the generic spotlight ::after */
+.bento-card::after {
+  display: none !important;
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -474,6 +483,8 @@ select option {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -589,9 +600,71 @@ select option {
   }
 }
 
+/* ────────────────────────────────────────────────────────
+   Spotlight cursor-following glow system
+   Cursor position injected via JS: --sx / --sy on each .spotlight element
+   ─────────────────────────────────────────────────────── */
+.spotlight {
+  position: relative;
+  isolation: isolate;
+}
+.spotlight::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    190px circle at var(--sx, -9999px) var(--sy, -9999px),
+    rgba(99,102,241,0.13) 0%,
+    transparent 75%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+  z-index: -1;
+}
+.spotlight:hover::after {
+  opacity: 1;
+}
+/* Elements that have their own ::after (cta-btn) must not clash */
+.cta-btn.spotlight::after {
+  display: none !important;
+}
+
+/* ────────────────────────────────────────────────────────
+   Button shimmer sweep on hover
+   ─────────────────────────────────────────────────────── */
+@keyframes shimmerSweep {
+  0%   { transform: translateX(-200%) skewX(-12deg); }
+  100% { transform: translateX(400%)  skewX(-12deg); }
+}
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.btn-shimmer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255,255,255,0.08),
+    transparent
+  );
+  transform: translateX(-200%) skewX(-12deg);
+  pointer-events: none;
+  z-index: 1;
+}
+.btn-shimmer:hover:not(:disabled)::before {
+  animation: shimmerSweep 0.65s ease-out forwards;
+}
+
 /* Improve focus-visible ring visibility on interactive elements */
 :focus-visible {
   outline: 2px solid rgba(99,102,241,0.7);
   outline-offset: 2px;
 }
-

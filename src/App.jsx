@@ -132,7 +132,7 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
       : 'border-slate-700 focus-within:border-indigo-500';
 
   return (
-    <div className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-3 space-y-2">
+    <div className="spotlight bg-slate-900/40 border border-slate-800/80 rounded-xl p-3 space-y-2">
       <div className="flex justify-between items-center">
         <span className={`text-[10px] font-semibold uppercase tracking-wider ${accent}`}>{label}</span>
         {grabbed && (
@@ -162,7 +162,7 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
         <button
           onClick={handleGrab}
           disabled={!playerReady || disabled}
-          className="flex items-center justify-center gap-1 py-2 sm:py-1 rounded-lg text-xs sm:text-[10px] font-semibold
+          className="btn-shimmer flex items-center justify-center gap-1 py-2 sm:py-1 rounded-lg text-xs sm:text-[10px] font-semibold
             bg-slate-950 hover:bg-slate-800 border border-slate-800
             text-slate-300 hover:text-white transition-all
             disabled:opacity-40 disabled:cursor-not-allowed min-h-[36px] sm:min-h-0"
@@ -174,7 +174,7 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
         <button
           onClick={handleSeek}
           disabled={!playerReady || disabled}
-          className={`flex items-center justify-center gap-1 py-2 sm:py-1 rounded-lg text-xs sm:text-[10px] font-semibold
+          className={`btn-shimmer flex items-center justify-center gap-1 py-2 sm:py-1 rounded-lg text-xs sm:text-[10px] font-semibold
             bg-indigo-950/45 hover:bg-indigo-900/60 border border-indigo-900/50
             text-indigo-300 hover:text-indigo-100 transition-all
             disabled:opacity-40 disabled:cursor-not-allowed min-h-[36px] sm:min-h-0
@@ -191,7 +191,7 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
 
 function FAQItem({ question, answer, isOpen, onToggle }) {
   return (
-    <div className={`faq-item ${isOpen ? 'open' : ''}`}>
+    <div className={`faq-item spotlight ${isOpen ? 'open' : ''}`}>
       <button
         onClick={onToggle}
         aria-expanded={isOpen}
@@ -413,7 +413,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
 
         {/* Hero input + CTA */}
         <div className="animate-fade-in-up animation-delay-300 max-w-xl mx-auto space-y-3.5">
-          <div className="hero-input-wrap">
+          <div className="hero-input-wrap spotlight">
             <Search className="w-4 h-4 text-slate-500 flex-shrink-0" />
             <input
               ref={inputRef}
@@ -478,7 +478,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
           {bentoFeatures.map((f, i) => (
             <div
               key={f.title}
-              className={`bento-card animate-fade-in-up`}
+              className={`bento-card spotlight animate-fade-in-up`}
               style={{
                 animationDelay: `${i * 80}ms`,
                 '--card-bg': f.color,
@@ -740,6 +740,19 @@ export default function App() {
       terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [logs, autoScroll]);
+
+  // ── Spotlight cursor-glow: update --sx / --sy CSS vars on all .spotlight elements ──
+  useEffect(() => {
+    const onMove = (e) => {
+      document.querySelectorAll('.spotlight').forEach(el => {
+        const r = el.getBoundingClientRect();
+        el.style.setProperty('--sx', `${e.clientX - r.left}px`);
+        el.style.setProperty('--sy', `${e.clientY - r.top}px`);
+      });
+    };
+    window.addEventListener('mousemove', onMove, { passive: true });
+    return () => window.removeEventListener('mousemove', onMove);
+  }, []);
 
   // ── Enter dashboard from hero ─────────────────────────────────────────────
   const handleEnterDashboard = useCallback(() => {
@@ -1305,7 +1318,7 @@ export default function App() {
             { icon: <Wifi className="w-4 h-4 text-indigo-400" />, title: 'SSE Pipeline', desc: 'Real-time progress events streamed to your browser via Server-Sent Events.' },
             { icon: <BookOpen className="w-4 h-4 text-violet-400" />, title: 'Developer API', desc: 'REST endpoints for search, format detection, clip initiation, and download delivery.' },
           ].map(s => (
-            <div key={s.title} className="modal-service-card">
+            <div key={s.title} className="modal-service-card spotlight">
               <div className="flex items-center gap-2 mb-2">{s.icon}<span className="text-xs font-bold text-slate-200 font-display">{s.title}</span></div>
               <p className="text-[11px] text-slate-500 leading-relaxed">{s.desc}</p>
             </div>
@@ -1499,7 +1512,7 @@ export default function App() {
               <div className="space-y-1.5">
                 <button
                   onClick={() => setShowCookies(v => !v)}
-                  className="w-full flex justify-between items-center px-3 py-2.5 rounded-xl bg-slate-900/40 border border-slate-800 hover:border-amber-700/50 transition-all group"
+                  className="spotlight w-full flex justify-between items-center px-3 py-2.5 rounded-xl bg-slate-900/40 border border-slate-800 hover:border-amber-700/50 transition-all group"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase group-hover:text-amber-400 transition-colors">
@@ -1538,7 +1551,7 @@ export default function App() {
                       <button
                         onClick={saveCookies}
                         disabled={!cookies.trim() || extracting}
-                        className="flex-1 py-2.5 rounded-lg text-[10px] font-bold transition-all
+                        className="btn-shimmer flex-1 py-2.5 rounded-lg text-[10px] font-bold transition-all
                           bg-amber-600 hover:bg-amber-500 text-white
                           disabled:bg-slate-900 disabled:text-slate-600 disabled:cursor-not-allowed"
                       >
@@ -1548,7 +1561,7 @@ export default function App() {
                         <button
                           onClick={deleteCookies}
                           disabled={extracting}
-                          className="px-3 py-2.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40
+                          className="btn-shimmer px-3 py-2.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40
                             text-rose-400 rounded-lg text-[10px] font-semibold transition-all"
                         >
                           Purge
@@ -1797,7 +1810,7 @@ export default function App() {
 
                 {/* Case A: Success Card */}
                 {extractionComplete && (
-                  <div className="w-full bg-emerald-950/15 border border-emerald-500/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
+                  <div className="spotlight w-full bg-emerald-950/15 border border-emerald-500/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
                     <div className="mx-auto w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
                       <CheckCircle2 className="w-5 h-5" style={{ animation: 'scalePulse 2s ease-in-out infinite' }} />
                     </div>
@@ -1833,7 +1846,7 @@ export default function App() {
 
                 {/* Case B: Failed Card */}
                 {extractionFailed && (
-                  <div className="w-full bg-rose-950/15 border border-rose-500/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
+                  <div className="spotlight w-full bg-rose-950/15 border border-rose-500/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
                     <div className="mx-auto w-10 h-10 rounded-full bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400">
                       <AlertCircle className="w-5 h-5 animate-pulse" />
                     </div>
@@ -1882,7 +1895,7 @@ export default function App() {
 
                 {/* Case E: Server Busy Card */}
                 {serverBusy && !extracting && !extractionComplete && !extractionFailed && (
-                  <div className="w-full bg-amber-950/15 border border-amber-500/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
+                  <div className="spotlight w-full bg-amber-950/15 border border-amber-500/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
                     <div className="mx-auto w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400">
                       <Loader2 className="w-5 h-5 animate-spin" />
                     </div>
@@ -1916,7 +1929,7 @@ export default function App() {
 
                 {/* Case C: Active Extraction (Progress Card) */}
                 {extracting && !extractionComplete && !extractionFailed && (
-                  <div className="w-full bg-slate-900/40 border border-slate-800/85 rounded-2xl p-4 space-y-4 shadow-xl animate-fade-in">
+                  <div className="spotlight w-full bg-slate-900/40 border border-slate-800/85 rounded-2xl p-4 space-y-4 shadow-xl animate-fade-in">
                     {/* Current Status */}
                     <div className="flex justify-between items-center text-xs">
                       <div className="flex items-center gap-2">
@@ -2204,7 +2217,7 @@ export default function App() {
             return (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filtered.map(item => (
-                  <div key={item.id} className="history-card group">
+                  <div key={item.id} className="history-card spotlight group">
                     <div className="space-y-3">
                       {/* Thumbnail Container */}
                       <div className="history-thumbnail-container">
@@ -2243,7 +2256,7 @@ export default function App() {
                     <div className="flex items-center gap-1.5 pt-2 border-t border-slate-900 mt-auto">
                       <button
                         onClick={() => handleReloadSettings(item)}
-                        className="flex-1 py-2 bg-indigo-950/45 hover:bg-indigo-900/60 border border-indigo-900/50 hover:border-indigo-700/50 text-indigo-300 hover:text-indigo-100 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1"
+                        className="btn-shimmer flex-1 py-2 bg-indigo-950/45 hover:bg-indigo-900/60 border border-indigo-900/50 hover:border-indigo-700/50 text-indigo-300 hover:text-indigo-100 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1"
                       >
                         <RefreshCw className="w-3 h-3" />
                         Reload Settings
