@@ -1813,8 +1813,8 @@ async function handleTelegramUpdate(update) {
         const uptimeSec = Math.round(process.uptime());
         const uptimeStr = formatDuration(uptimeSec);
         const memory = process.memoryUsage();
-        const heapMB = Math.round(memory.heapUsed / 1024 / 1024);
-        const rssMB = Math.round(memory.rss / 1024 / 1024);
+        const heapMB = (memory.heapUsed / 1024 / 1024).toFixed(1);
+        const rssMB = (memory.rss / 1024 / 1024).toFixed(1);
         const cookiesExist = fs.existsSync(globalCookiePath);
         let cookieSizeStr = 'N/A';
         let cookieMtimeStr = 'N/A';
@@ -1834,7 +1834,9 @@ async function handleTelegramUpdate(update) {
           `• *Uptime*: ${uptimeStr}`,
           `• *Active Jobs*: ${getActiveExtractionsCount()}/${CONFIG.MAX_CONCURRENT_EXTRACTIONS}`,
           `• *Queue Status*: No queue active`,
-          `• *Memory Usage*: HEAP ${heapMB} MB / RSS ${rssMB} MB`,
+          `• *Memory Usage*:`,
+          `  RSS: ${rssMB} MB`,
+          `  Heap Used: ${heapMB} MB`,
           `• *Cookies Present*: ${cookiesExist ? 'Yes' : 'No'}`,
           `• *Cookie Size*: ${cookieSizeStr}`,
           `• *Last Cookie Upload*: ${cookieMtimeStr}`,
@@ -1957,7 +1959,7 @@ async function handleTelegramUpdate(update) {
       }
       case '/version': {
         exec('git rev-parse --short HEAD', (gitErr, gitStdout) => {
-          const gitCommit = (!gitErr && gitStdout) ? gitStdout.trim() : 'N/A';
+          const gitCommit = (!gitErr && gitStdout) ? gitStdout.trim() : 'unavailable';
           const verMsg = [
             `ℹ️ *CropTube Version Info*`,
             `• *CropTube Version*: 1.0.0`,
@@ -1977,6 +1979,7 @@ async function handleTelegramUpdate(update) {
 
 let lastUpdateId = 0;
 let pollingErrorCount = 0;
+let activePollingRequest = null;
 
 function startTelegramBotPolling() {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -1996,13 +1999,46 @@ function startTelegramBotPolling() {
   appLogger('info', 'System', 'Telegram Bot Remote Administration Polling started.');
 
   async function poll() {
+    if (!global.telegramPollingActive) return;
     const url = `https://api.telegram.org/bot${botToken}/getUpdates?offset=${lastUpdateId + 1}&timeout=20`;
     
-    const req = https.get(url, (res) => {
+    activePollingRequest = https.get(url, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', async () => {
+        activePollingRequest = null;
         try {
+          const statusCode = res.statusCode;
+          if (statusCode === 429) {
+            let retryAfter = 5; // Default 5s fallback
+            if (res.headers['retry-after']) {
+              const parsedHeader = parseInt(res.headers['retry-after'], 10);
+              if (!isNaN(parsedHeader)) retryAfter = parsedHeader;
+            }
+            try {
+              const parsedBody = JSON.parse(data);
+              if (parsedBody.parameters && parsedBody.parameters.retry_after) {
+                retryAfter = parsedBody.parameters.retry_after;
+              }
+            } catch (_) {}
+            
+            console.warn(`[Telegram Bot] Rate limited (429). Retrying after ${retryAfter}s...`);
+            if (global.telegramPollingActive) {
+              setTimeout(poll, retryAfter * 1000);
+            }
+            return;
+          }
+          
+          if (statusCode >= 500) {
+            pollingErrorCount++;
+            const delay = Math.min(10000 * Math.pow(2, pollingErrorCount - 1), 60000);
+            console.error(`[Telegram Bot] Temporary Telegram API failure (${statusCode}). Retrying in ${delay}ms...`);
+            if (global.telegramPollingActive) {
+              setTimeout(poll, delay);
+            }
+            return;
+          }
+
           const body = JSON.parse(data);
           if (body.ok && body.result) {
             pollingErrorCount = 0; // Reset error count on successful communication
@@ -2024,25 +2060,47 @@ function startTelegramBotPolling() {
         }
         
         // Handle backoff or immediate retry
-        if (pollingErrorCount > 0) {
-          const delay = Math.min(10000 * Math.pow(2, pollingErrorCount - 1), 60000);
-          setTimeout(poll, delay);
-        } else {
-          setTimeout(poll, 1000);
+        if (global.telegramPollingActive) {
+          if (pollingErrorCount > 0) {
+            const delay = Math.min(10000 * Math.pow(2, pollingErrorCount - 1), 60000);
+            setTimeout(poll, delay);
+          } else {
+            setTimeout(poll, 1000);
+          }
         }
       });
     });
 
-    req.on('error', (err) => {
+    activePollingRequest.on('error', (err) => {
+      activePollingRequest = null;
       console.error('[Telegram Bot] Polling network error:', err.message);
       pollingErrorCount++;
       const delay = Math.min(10000 * Math.pow(2, pollingErrorCount - 1), 60000);
-      setTimeout(poll, delay);
+      if (global.telegramPollingActive) {
+        setTimeout(poll, delay);
+      }
     });
   }
 
   poll();
 }
+
+function gracefulShutdown() {
+  if (global.telegramPollingActive) {
+    console.log('[Telegram Bot] Shutting down polling loop gracefully...');
+    global.telegramPollingActive = false;
+    if (activePollingRequest) {
+      try {
+        activePollingRequest.destroy();
+        console.log('[Telegram Bot] Aborted active long-poll request.');
+      } catch (err) {
+        console.error('[Telegram Bot] Error destroying request:', err);
+      }
+    }
+  }
+}
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
 
 // Download Endpoint - Downloads clip then immediately cleans it up
 app.get('/api/download/:fileId', (req, res) => {
