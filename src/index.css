@@ -229,35 +229,53 @@ select option {
    Hero Input
    ─────────────────────────────────────────────────────────── */
 .hero-input-wrap {
-  background: rgba(11,17,34,0.6);
-  border: 1px solid rgba(255,255,255,0.09);
-  border-radius: 16px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0.85rem 1.25rem;
+  background: rgba(11,17,34,0.65);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 18px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: border-color 0.22s ease, box-shadow 0.22s ease;
+  box-shadow: 0 2px 12px -4px rgba(0,0,0,0.35);
 }
 .hero-input-wrap:focus-within {
-  border-color: rgba(99,102,241,0.5);
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.08);
+  border-color: rgba(99,102,241,0.55);
+  box-shadow: 0 0 0 4px rgba(99,102,241,0.1), 0 2px 12px -4px rgba(0,0,0,0.35);
 }
 
 /* ──────────────────────────────────────────────────────────
    CTA Gradient Button
    ─────────────────────────────────────────────────────────── */
 .cta-btn {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  background: linear-gradient(135deg, #5b5ef4 0%, #7c3aed 55%, #a855f7 100%);
   border: none;
-  border-radius: 12px;
+  border-radius: 14px;
   color: #fff;
   font-family: 'Outfit', sans-serif;
   font-weight: 700;
   font-size: 0.95rem;
-  padding: 0.85rem 2rem;
+  letter-spacing: 0.01em;
+  padding: 0.95rem 2rem;
   cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
-  box-shadow: 0 8px 24px -6px rgba(99,102,241,0.5);
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.22s ease,
+              filter 0.22s ease;
+  box-shadow:
+    0 8px 28px -6px rgba(99,102,241,0.6),
+    0 2px 8px -2px rgba(124,58,237,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.15);
   position: relative;
   overflow: hidden;
+}
+.cta-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 60%);
+  pointer-events: none;
 }
 .cta-btn::after {
   content: '';
@@ -267,18 +285,24 @@ select option {
   transition: background 0.2s ease;
 }
 .cta-btn:hover {
-  transform: translateY(-2px) scale(1.015);
-  box-shadow: 0 14px 32px -6px rgba(99,102,241,0.65);
-  filter: brightness(1.08);
+  transform: translateY(-3px) scale(1.018);
+  box-shadow:
+    0 18px 40px -8px rgba(99,102,241,0.75),
+    0 4px 12px -3px rgba(124,58,237,0.45),
+    inset 0 1px 0 rgba(255,255,255,0.2);
+  filter: brightness(1.1);
 }
 .cta-btn:active {
-  transform: translateY(0) scale(0.99);
+  transform: translateY(0) scale(0.985);
+  box-shadow: 0 4px 14px -4px rgba(99,102,241,0.5);
+  transition-duration: 0.08s;
 }
 .cta-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.38;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+  filter: none;
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -288,22 +312,23 @@ select option {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0.35rem 0.85rem;
+  padding: 0.4rem 1rem;
   border-radius: 9999px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.03);
-  color: rgba(148,163,184,1);
+  border: 1px solid rgba(255,255,255,0.09);
+  background: rgba(255,255,255,0.04);
+  color: rgba(148,163,184,0.9);
   font-size: 0.75rem;
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
   white-space: nowrap;
 }
 .qs-chip:hover {
-  background: rgba(99,102,241,0.12);
-  border-color: rgba(99,102,241,0.3);
-  color: #fff;
+  background: rgba(99,102,241,0.14);
+  border-color: rgba(99,102,241,0.35);
+  color: #e2e8f0;
+  transform: translateY(-1px);
 }
 
 /* ──────────────────────────────────────────────────────────

@@ -318,14 +318,14 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
       {/* ── NAVBAR ──────────────────────────────────────────────── */}
       <nav className="nav-glass sticky top-0 z-50 w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14">
+          <div className="flex items-center justify-between h-16">
 
             {/* Logo */}
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center neon-glow-indigo">
-                <Scissors className="w-3.5 h-3.5 text-white" />
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center neon-glow-indigo">
+                <Scissors className="w-4 h-4 text-white" />
               </div>
-              <span className="font-display font-800 text-[15px] tracking-tight text-white">
+              <span className="font-display font-800 text-base tracking-tight text-white">
                 Crop<span className="text-indigo-400">Tube</span>
               </span>
             </div>
@@ -381,39 +381,39 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
         </div>
       </nav>
 
-      {/* ── HERO ────────────────────────────────────────────────── */}
-      <section className="relative px-4 sm:px-6 lg:px-8 pt-20 pb-24 max-w-4xl mx-auto text-center">
+      {/* ── HERO ─────────────────────────────────────────────── */}
+      <section className="relative px-4 sm:px-6 lg:px-8 pt-24 pb-28 max-w-5xl mx-auto text-center">
         {/* Glow ring behind headline */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute top-8 left-1/2 -translate-x-1/2 w-[520px] h-[320px] rounded-full opacity-20"
+          className="pointer-events-none absolute top-8 left-1/2 -translate-x-1/2 w-[560px] h-[340px] rounded-full opacity-20"
           style={{ background: 'radial-gradient(ellipse at center, rgba(99,102,241,0.5) 0%, transparent 70%)' }}
         />
 
         {/* Badge */}
         <div className="animate-fade-in inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-indigo-500/25
-          bg-indigo-500/10 text-indigo-300 text-[11px] font-semibold tracking-wide mb-7">
+          bg-indigo-500/10 text-indigo-300 text-[11px] font-semibold tracking-wide mb-8">
           <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
           Cloud Extraction · No Full Downloads · 4K Supported
         </div>
 
         {/* Headline */}
         <h1 className="font-display animate-fade-in-up animation-delay-100
-          text-4xl sm:text-5xl lg:text-[3.6rem] font-extrabold tracking-tight leading-[1.12] text-white mb-5">
+          text-4xl sm:text-5xl lg:text-[3.6rem] font-extrabold tracking-tight leading-[1.12] text-white mb-6">
           Surgical{' '}
           <span className="font-serif italic text-indigo-300">YouTube</span>
           <br />Clip Extraction
         </h1>
 
         {/* Sub-headline */}
-        <p className="animate-fade-in-up animation-delay-200 text-slate-400 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto mb-10">
+        <p className="animate-fade-in-up animation-delay-200 text-slate-300 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto mb-10">
           Extract high-fidelity clips without downloading entire videos.
           Zero quality loss, cloud-based, and instantly ready to download.
         </p>
 
         {/* Hero input + CTA */}
-        <div className="animate-fade-in-up animation-delay-300 max-w-xl mx-auto space-y-3">
-          <div className="hero-input-wrap flex items-center gap-2 px-4 py-3">
+        <div className="animate-fade-in-up animation-delay-300 max-w-xl mx-auto space-y-3.5">
+          <div className="hero-input-wrap">
             <Search className="w-4 h-4 text-slate-500 flex-shrink-0" />
             <input
               ref={inputRef}
@@ -423,13 +423,13 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
               onChange={e => setHeroUrl(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Paste YouTube URL or type search keywords…"
-              className="flex-1 bg-transparent outline-none text-sm text-slate-200 placeholder-slate-600 min-w-0"
+              className="flex-1 bg-transparent outline-none text-sm text-slate-200 placeholder-slate-500 min-w-0"
             />
             {heroUrl && (
               <button
                 onClick={() => setHeroUrl('')}
                 aria-label="Clear URL"
-                className="text-slate-600 hover:text-rose-400 transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 rounded"
+                className="text-slate-500 hover:text-rose-400 transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 rounded"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -448,8 +448,8 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
         </div>
 
         {/* Quick-start chips */}
-        <div className="animate-fade-in-up animation-delay-400 flex flex-wrap justify-center gap-2 mt-7">
-          <span className="text-[11px] text-slate-600 self-center mr-1">Try:</span>
+        <div className="animate-fade-in-up animation-delay-400 flex flex-wrap justify-center gap-2.5 mt-9">
+          <span className="text-[11px] text-slate-500 self-center mr-1">Try:</span>
           {quickStarts.map(qs => (
             <button
               key={qs.value}
