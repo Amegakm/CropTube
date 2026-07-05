@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Scissors, Play, Download, AlertCircle, CheckCircle2,
   Loader2, Crosshair, Trash2, Search, ChevronDown, Menu, X,
@@ -194,7 +194,8 @@ function FAQItem({ question, answer, isOpen, onToggle }) {
     <div className={`faq-item ${isOpen ? 'open' : ''}`}>
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-5 py-4 text-left"
+        aria-expanded={isOpen}
+        className="w-full flex items-center justify-between px-5 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-inset rounded-t-2xl"
       >
         <span className="font-body font-600 text-sm text-slate-200 pr-4">{question}</span>
         <ChevronDown
@@ -425,7 +426,11 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
               className="flex-1 bg-transparent outline-none text-sm text-slate-200 placeholder-slate-600 min-w-0"
             />
             {heroUrl && (
-              <button onClick={() => setHeroUrl('')} className="text-slate-600 hover:text-rose-400 transition-colors flex-shrink-0">
+              <button
+                onClick={() => setHeroUrl('')}
+                aria-label="Clear URL"
+                className="text-slate-600 hover:text-rose-400 transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 rounded"
+              >
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -653,7 +658,6 @@ export default function App() {
     }
   });
   const [historySearchQuery, setHistorySearchQuery] = useState('');
-  const setCurrentStep = () => {};
   const [errorMsg, setErrorMsg] = useState('');
   const [selectedFormat, setSelectedFormat] = useState('mp4');
   const [selectedQuality, setSelectedQuality] = useState('1080p');
@@ -678,7 +682,6 @@ export default function App() {
 
   const [logs, setLogs] = useState([]);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [showAdvancedDiagnostics, setShowAdvancedDiagnostics] = useState(false);
   const [retryPayload, setRetryPayload] = useState(null);
   const [serverBusy, setServerBusy] = useState(false);
@@ -703,6 +706,13 @@ export default function App() {
 
   // Single source of truth for pipelineStage, computed dynamically
   const pipelineStage = mapStatusToStage(statusMessage, progress, extractionComplete, extractionFailed);
+
+  // Memoized filtered history (avoids re-filtering on every render unrelated to history)
+  const filteredHistory = useMemo(() => jobHistory.filter(item => {
+    const q = historySearchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (item.title || '').toLowerCase().includes(q) || (item.url || '').toLowerCase().includes(q);
+  }), [jobHistory, historySearchQuery]);
 
   const playerRef = useRef(null);
   const ytApiReady = useRef(false);
@@ -922,10 +932,8 @@ export default function App() {
 
   // ── Resolve exact yt-dlp format_id reactively ──────────────────────────────
   useEffect(() => {
-    console.log(`[Format Resolution] selectedQuality: ${selectedQuality}, selectedFormat: ${selectedFormat}, rawFormats count: ${rawFormats.length}`);
     if (!rawFormats || rawFormats.length === 0) {
       setSelectedFormatId('none');
-      console.log(`[Format Resolution] Resolved selectedFormatId: none (empty rawFormats)`);
       return;
     }
 
@@ -937,7 +945,6 @@ export default function App() {
                     rawFormats.find(f => f.acodec !== 'none' && f.vcodec === 'none');
       const resolvedId = match ? match.format_id : 'bestaudio';
       setSelectedFormatId(resolvedId);
-      console.log(`[Format Resolution] Resolved selectedFormatId (audio): ${resolvedId}`);
     } else {
       const targetHeight = parseInt(selectedQuality) || 1080;
       const matchingHeight = rawFormats.filter(f => (f.label === selectedQuality || f.height === targetHeight) && f.vcodec !== 'none');
@@ -947,7 +954,6 @@ export default function App() {
                             rawFormats.find(f => f.vcodec !== 'none');
       const resolvedId = containerMatch ? containerMatch.format_id : 'none';
       setSelectedFormatId(resolvedId);
-      console.log(`[Format Resolution] Resolved selectedFormatId (video): ${resolvedId}, targetHeight: ${targetHeight}, matchingHeight count: ${matchingHeight.length}`);
     }
   }, [selectedFormat, selectedQuality, rawFormats]);
 
@@ -1054,7 +1060,6 @@ export default function App() {
 
     setErrorMsg('');
     setExtracting(true);
-    setCurrentStep(1);
     setProgress(0);
     setStatusMessage('Preparing clip...');
     setExtractionFailed(false);
@@ -1069,8 +1074,6 @@ export default function App() {
       { text: `[system] Selected range: ${targetPayload.start} - ${targetPayload.end} (${secsToHMS(e - s)})`, type: 'system' },
       { text: `[system] Target quality: ${targetPayload.quality} (${targetPayload.format.toUpperCase()})`, type: 'system' }
     ]);
-
-    console.log(`[Initiate Payload Log] Sending payload:`, JSON.stringify(targetPayload, null, 2));
 
     fetch('/api/extract/initiate', {
       method: 'POST',
@@ -1090,13 +1093,11 @@ export default function App() {
         return d;
       })
       .then(({ fileId }) => {
-        setCurrentStep(2);
-        setLogs(prev => [...prev, { text: `[system] Job initiated. File ID: ${fileId}. Connecting to SSE logs stream...`, type: 'system' }]);
+        setLogs(prev => [...prev, { text: `[system] Job initiated. Connecting to SSE stream...`, type: 'system' }]);
         const es = new EventSource(`/api/extract/stream?fileId=${fileId}`);
         let isCompleted = false;
 
         es.onopen = () => {
-          console.log('[Frontend SSE] connected');
           setLogs(prev => [...prev, { text: `[system] SSE Stream connected. Slicing in progress...`, type: 'system' }]);
         };
 
@@ -1107,7 +1108,6 @@ export default function App() {
               setStatusMessage(data.message);
               setLogs(prev => [...prev, { text: `[info] ${data.message}`, type: 'info' }]);
             } else if (data.type === 'progress') {
-              console.log('[Frontend SSE] progress update');
               const { stage, pct } = data.message;
               setStatusMessage(stage);
               setProgress(pct);
@@ -1120,25 +1120,20 @@ export default function App() {
               setLastError(data.message);
               setStatusMessage('');
               setExtracting(false);
-              setCurrentStep(0);
               es.close();
-              console.log('[Frontend SSE] eventsource closed');
               setLogs(prev => [...prev, { text: `[error] Authentication error: ${data.message}`, type: 'error' }]);
             } else if (data.type === 'error') {
               setExtractionFailed(true);
               setLastError(data.message);
               setStatusMessage('');
               setExtracting(false);
-              setCurrentStep(0);
               es.close();
-              console.log('[Frontend SSE] eventsource closed');
               setLogs(prev => [...prev, { text: `[error] Technical error: ${data.message}`, type: 'error' }]);
             }
           } catch (_) { }
         };
 
         es.addEventListener('completed', (evt) => {
-          console.log('[Frontend SSE] completed event received');
           isCompleted = true;
           setExtractedFileId(fileId);
           setExtractionComplete(true);
@@ -1172,34 +1167,27 @@ export default function App() {
           link.download = `CropTube_Clip_${fileId}.${dlExt}`;
           document.body.appendChild(link);
           setTimeout(() => {
-            console.log('[Frontend SSE] download triggered');
             link.click();
             document.body.removeChild(link);
           }, 100);
 
           setTimeout(() => {
             setExtracting(false);
-            setCurrentStep(0);
             es.close();
-            console.log('[Frontend SSE] eventsource closed');
           }, 1000);
         });
 
         es.onerror = () => {
-          console.log('[Frontend SSE] onerror triggered');
-          if (isCompleted) { es.close(); console.log('[Frontend SSE] eventsource closed'); return; }
+          if (isCompleted) { es.close(); return; }
           setExtractionFailed(true);
           setLastError('Connection lost. The clip may still be processing on the server.');
           setStatusMessage('');
           setExtracting(false);
-          setCurrentStep(0);
           es.close();
-          console.log('[Frontend SSE] eventsource closed');
           setLogs(prev => [...prev, { text: `[error] Connection lost.`, type: 'error' }]);
         };
       })
       .catch(err => {
-        // Detect SERVER_BUSY specifically
         const errText = err.message || '';
         if (errText.includes('SERVER_BUSY') || errText.includes('Another extraction is currently running')) {
           setServerBusy(true);
@@ -1207,14 +1195,12 @@ export default function App() {
           setLastError('');
           setStatusMessage('');
           setExtracting(false);
-          setCurrentStep(0);
           setLogs(prev => [...prev, { text: `[info] Server busy — another extraction is already running.`, type: 'info' }]);
         } else {
           setExtractionFailed(true);
           setLastError(err.message || 'Unable to initiate clip extraction. Please try again.');
           setStatusMessage('');
           setExtracting(false);
-          setCurrentStep(0);
           setLogs(prev => [...prev, { text: `[error] Fetch initiation failed: ${err.message || err}`, type: 'error' }]);
         }
       });
@@ -1426,8 +1412,9 @@ export default function App() {
             <span className="text-[10px] text-slate-600 font-mono">ESC to close</span>
             <button
               onClick={closeModal}
+              aria-label="Close dialog"
               className="flex items-center gap-1.5 px-4 py-2 bg-white/6 hover:bg-white/10 border border-white/8 hover:border-white/15
-                text-white/80 hover:text-white text-xs font-semibold rounded-xl transition-all"
+                text-white/80 hover:text-white text-xs font-semibold rounded-xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
             >
               <X className="w-3.5 h-3.5" /> Close
             </button>
@@ -1587,16 +1574,17 @@ export default function App() {
                   onKeyDown={handleKeyDown}
                   placeholder="Paste YouTube link or type search keywords..."
                   disabled={extracting}
+                  aria-label="YouTube URL or search query"
                   className="w-full pl-3 pr-20 py-3 bg-slate-900/40 border border-slate-800 focus:border-indigo-500
                     rounded-xl outline-none text-xs text-slate-200 placeholder-slate-600
-                    transition-all focus:ring-1 focus:ring-indigo-500/20 disabled:opacity-50"
+                    transition-all focus:ring-1 focus:ring-indigo-500/20 focus-visible:ring-2 focus-visible:ring-indigo-500/40 disabled:opacity-50"
                 />
                 <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                   {youtubeUrl && !extracting && (
                     <button
                       onClick={() => { setYoutubeUrl(''); setSearchResults([]); }}
-                      className="text-slate-500 hover:text-rose-400 text-xs transition-colors p-1"
-                      title="Clear"
+                      className="text-slate-500 hover:text-rose-400 text-xs transition-colors p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 rounded"
+                      aria-label="Clear URL"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -1604,8 +1592,8 @@ export default function App() {
                   <button
                     onClick={handleSearch}
                     disabled={extracting || isSearching || !youtubeUrl.trim()}
-                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg p-2 transition-colors"
-                    title="Search YouTube"
+                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
+                    aria-label="Search YouTube"
                   >
                     {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                   </button>
@@ -1743,7 +1731,8 @@ export default function App() {
                         }
                       }}
                       disabled={extracting}
-                      className="w-full bg-slate-900/40 border border-slate-800 focus:border-indigo-500 text-slate-300
+                      aria-label="Output format"
+                      className="w-full bg-slate-900/40 border border-slate-800 focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/40 text-slate-300
                         py-3 px-3 rounded-xl outline-none text-xs transition-colors disabled:opacity-50"
                     >
                       <optgroup label="Video Formats">
@@ -1765,7 +1754,8 @@ export default function App() {
                       value={selectedQuality}
                       onChange={e => setSelectedQuality(e.target.value)}
                       disabled={extracting}
-                      className="w-full bg-slate-900/40 border border-slate-800 focus:border-indigo-500 text-slate-300
+                      aria-label="Output quality"
+                      className="w-full bg-slate-900/40 border border-slate-800 focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/40 text-slate-300
                         py-3 px-3 rounded-xl outline-none text-xs transition-colors disabled:opacity-50"
                     >
                       {selectedFormat === 'mp3' || selectedFormat === 'm4a' ? (
@@ -1805,22 +1795,22 @@ export default function App() {
               <div className="space-y-4 pt-2 border-t border-slate-900/40">
                 <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">6. Download & Progress</label>
 
-/* Case A: Success Card */
+                {/* Case A: Success Card */}
                 {extractionComplete && (
-                  <div className="w-full bg-emerald-950/15 border border-emerald-500/20 rounded-2xl p-5 text-center space-y-4 shadow-xl animate-fade-in">
-                    <div className="mx-auto w-11 h-11 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
-                      <CheckCircle2 className="w-5.5 h-5.5 animate-bounce" />
+                  <div className="w-full bg-emerald-950/15 border border-emerald-500/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
+                    <div className="mx-auto w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
+                      <CheckCircle2 className="w-5 h-5" style={{ animation: 'scalePulse 2s ease-in-out infinite' }} />
                     </div>
-                    <div className="space-y-1">
-                      <h3 className="font-display font-800 text-base text-white">Extraction Successful!</h3>
-                      <p className="text-xs text-slate-400">Your custom clip is ready.</p>
+                    <div className="space-y-0.5">
+                      <h3 className="font-display font-800 text-sm text-white">Extraction Successful!</h3>
+                      <p className="text-xs text-slate-400">Your clip is ready to download.</p>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-2.5 max-w-sm mx-auto pt-1">
-                       <a
+                    <div className="flex flex-col sm:flex-row gap-2 max-w-sm mx-auto">
+                      <a
                         href={`/api/download/${extractedFileId || jobHistory[0]?.id}`}
                         download={`CropTube_Clip_${extractedFileId || jobHistory[0]?.id}.${(retryPayload?.format || selectedFormat) === 'webm-audio' ? 'webm' : (retryPayload?.format || selectedFormat)}`}
-                        className="flex-1 py-2.5 bg-white hover:bg-slate-100 text-slate-950 rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95"
+                        className="flex-1 py-2.5 bg-white hover:bg-slate-100 text-slate-950 rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                       >
                         <Download className="w-3.5 h-3.5" /> Download
                       </a>
@@ -1833,7 +1823,7 @@ export default function App() {
                           setStatusMessage('');
                           setLogs([]);
                         }}
-                        className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95"
+                        className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
                       >
                         Extract Another
                       </button>
@@ -1843,13 +1833,13 @@ export default function App() {
 
                 {/* Case B: Failed Card */}
                 {extractionFailed && (
-                  <div className="w-full bg-rose-950/15 border border-rose-500/20 rounded-2xl p-5 text-center space-y-4 shadow-xl animate-fade-in">
-                    <div className="mx-auto w-11 h-11 rounded-full bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400">
-                      <AlertCircle className="w-5.5 h-5.5 animate-pulse" />
+                  <div className="w-full bg-rose-950/15 border border-rose-500/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
+                    <div className="mx-auto w-10 h-10 rounded-full bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400">
+                      <AlertCircle className="w-5 h-5 animate-pulse" />
                     </div>
-                    <div className="space-y-1">
-                      <h3 className="font-display font-800 text-base text-white">Extraction Failed</h3>
-                      <p className="text-xs text-rose-300 px-4 leading-relaxed font-semibold">
+                    <div className="space-y-0.5">
+                      <h3 className="font-display font-800 text-sm text-white">Extraction Failed</h3>
+                      <p className="text-xs text-rose-300 px-4 leading-relaxed">
                         {(() => {
                           const lower = (lastError || '').toLowerCase();
                           if (lower.includes('confirm you\'re not a bot') || lower.includes('confirm your age') || lower.includes('cookie') || lower.includes('auth')) {
@@ -1866,10 +1856,10 @@ export default function App() {
                       </p>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-2.5 max-w-sm mx-auto pt-1">
+                    <div className="flex flex-col sm:flex-row gap-2 max-w-sm mx-auto">
                       <button
                         onClick={() => handleExtract(retryPayload)}
-                        className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95"
+                        className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/60"
                       >
                         Retry
                       </button>
@@ -1882,7 +1872,7 @@ export default function App() {
                           setStatusMessage('');
                           setLogs([]);
                         }}
-                        className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95"
+                        className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
                       >
                         Extract Another
                       </button>
@@ -1892,23 +1882,20 @@ export default function App() {
 
                 {/* Case E: Server Busy Card */}
                 {serverBusy && !extracting && !extractionComplete && !extractionFailed && (
-                  <div className="w-full bg-amber-950/15 border border-amber-500/20 rounded-2xl p-5 text-center space-y-4 shadow-xl animate-fade-in">
-                    <div className="mx-auto w-11 h-11 rounded-full bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400">
-                      <Loader2 className="w-5.5 h-5.5 animate-spin" />
+                  <div className="w-full bg-amber-950/15 border border-amber-500/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
+                    <div className="mx-auto w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400">
+                      <Loader2 className="w-5 h-5 animate-spin" />
                     </div>
-                    <div className="space-y-1">
-                      <h3 className="font-display font-800 text-base text-white">⏳ Extraction Queue Full</h3>
-                      <p className="text-xs text-amber-300 px-4 leading-relaxed font-semibold">
-                        Another extraction is already in progress.
-                      </p>
-                      <p className="text-xs text-slate-500 px-4 leading-relaxed">
-                        Please wait until it finishes, then try again.
+                    <div className="space-y-0.5">
+                      <h3 className="font-display font-800 text-sm text-white">Queue Full</h3>
+                      <p className="text-xs text-amber-300/80 px-4 leading-relaxed">
+                        Another extraction is in progress. Please wait and try again.
                       </p>
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-2.5 max-w-sm mx-auto pt-1">
+                    <div className="flex flex-col sm:flex-row gap-2 max-w-sm mx-auto">
                       <button
                         onClick={() => handleExtract(retryPayload)}
-                        className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95"
+                        className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
                       >
                         <RefreshCw className="w-3.5 h-3.5" /> Try Again
                       </button>
@@ -1919,7 +1906,7 @@ export default function App() {
                           setProgress(0);
                           setStatusMessage('');
                         }}
-                        className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95"
+                        className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
                       >
                         Dismiss
                       </button>
@@ -1941,12 +1928,12 @@ export default function App() {
                     </div>
 
                     {/* Progress Bar */}
-                    <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden relative border border-slate-900">
+                    <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden relative border border-slate-900" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Extraction progress">
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 transition-all duration-300 ease-out relative"
-                        style={{ width: `${progress}%` }}
+                        className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 relative"
+                        style={{ width: `${progress}%`, transition: 'width 700ms cubic-bezier(0.25, 0.8, 0.25, 1)', willChange: 'width' }}
                       >
-                        <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                        <div className="absolute inset-0 bg-white/15 animate-pulse" />
                       </div>
                     </div>
 
@@ -1982,12 +1969,12 @@ export default function App() {
                           
                           let dotColor = 'bg-slate-800 border-slate-700';
                           if (isPast) dotColor = 'bg-emerald-500 border-emerald-400';
-                          else if (isActive) dotColor = 'bg-indigo-500 border-indigo-400 animate-pulse';
+                          else if (isActive) dotColor = 'bg-indigo-500 border-indigo-400 ring-2 ring-indigo-500/30';
 
                           return (
                             <div key={stageLabel} className="flex-1 flex flex-col items-center relative">
-                              <div className={`w-2.5 h-2.5 rounded-full border ${dotColor} transition-all duration-300`} />
-                              <span className={`text-[8px] mt-1 font-medium transition-colors duration-200 hidden sm:block ${isActive ? 'text-indigo-300 font-bold' : isPast ? 'text-slate-400' : 'text-slate-600'}`}>
+                              <div className={`w-2.5 h-2.5 rounded-full border ${dotColor} transition-all duration-500 ease-out`} />
+                              <span className={`text-[8px] mt-1 font-medium transition-all duration-300 hidden sm:block ${isActive ? 'text-indigo-300 font-bold' : isPast ? 'text-slate-500' : 'text-slate-700'}`}>
                                 {stageLabel}
                               </span>
                             </div>
@@ -2180,11 +2167,7 @@ export default function App() {
 
           {/* Grid / List of History */}
           {(() => {
-            const filtered = jobHistory.filter(item => {
-              const q = historySearchQuery.toLowerCase().trim();
-              if (!q) return true;
-              return (item.title || '').toLowerCase().includes(q) || (item.url || '').toLowerCase().includes(q);
-            });
+            const filtered = filteredHistory;
 
             if (jobHistory.length === 0) {
               return (
@@ -2267,8 +2250,8 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => handleRemoveHistoryItem(item.id)}
-                        className="p-2 bg-slate-950 hover:bg-rose-950/20 border border-slate-800 hover:border-rose-900/40 text-slate-500 hover:text-rose-400 rounded-xl transition-all"
-                        title="Remove from history"
+                        className="p-2 bg-slate-950 hover:bg-rose-950/20 border border-slate-800 hover:border-rose-900/40 text-slate-500 hover:text-rose-400 rounded-xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/60"
+                        aria-label={`Remove ${item.title} from history`}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

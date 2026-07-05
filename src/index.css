@@ -527,3 +527,42 @@ select option {
   gap: 0.75rem;
 }
 
+/* ──────────────────────────────────────────────────────────
+   Modal icon badge
+   ─────────────────────────────────────────────────────────── */
+.modal-icon-badge {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 12px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Success check pulse animation (subtler than bounce)
+   ─────────────────────────────────────────────────────────── */
+@keyframes scalePulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%       { transform: scale(1.12); opacity: 0.85; }
+}
+
+/* ──────────────────────────────────────────────────────────
+   Mobile responsiveness helpers — Phase 9
+   ─────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .history-card {
+    padding: 0.65rem;
+  }
+  .modal-content-box {
+    border-radius: 20px;
+  }
+}
+
+/* Improve focus-visible ring visibility on interactive elements */
+:focus-visible {
+  outline: 2px solid rgba(99,102,241,0.7);
+  outline-offset: 2px;
+}
+
