@@ -653,7 +653,7 @@ export default function App() {
     }
   });
   const [historySearchQuery, setHistorySearchQuery] = useState('');
-  const [currentStep, setCurrentStep] = useState(0);
+  const setCurrentStep = () => {};
   const [errorMsg, setErrorMsg] = useState('');
   const [selectedFormat, setSelectedFormat] = useState('mp4');
   const [selectedQuality, setSelectedQuality] = useState('1080p');
@@ -683,8 +683,26 @@ export default function App() {
   const [retryPayload, setRetryPayload] = useState(null);
   const [serverBusy, setServerBusy] = useState(false);
   const [extractedFileId, setExtractedFileId] = useState('');
-  // 0=Preparing, 1=Fetching Streams, 2=Processing Clip, 3=Finalizing Output, 4=Download Ready
-  const [pipelineStage, setPipelineStage] = useState(0);
+
+  // Helper to map status/progress/complete states to pipeline stages dynamically
+  const mapStatusToStage = (status, pct, complete, failed) => {
+    if (failed) return -1;
+    if (complete) return 4;
+    const s = (status || '').toLowerCase();
+    if (s.includes('finalizing') || s.includes('merging') || s.includes('remuxing')) {
+      return 3;
+    }
+    if (s.includes('downloading') || pct > 0 || s.includes('slicing') || s.includes('processing')) {
+      return 2;
+    }
+    if (s.includes('fetching') || s.includes('stream') || s.includes('preparing')) {
+      return 1;
+    }
+    return 0;
+  };
+
+  // Single source of truth for pipelineStage, computed dynamically
+  const pipelineStage = mapStatusToStage(statusMessage, progress, extractionComplete, extractionFailed);
 
   const playerRef = useRef(null);
   const ytApiReady = useRef(false);
@@ -1038,7 +1056,6 @@ export default function App() {
     setExtracting(true);
     setCurrentStep(1);
     setProgress(0);
-    setPipelineStage(0);
     setStatusMessage('Preparing clip...');
     setExtractionFailed(false);
     setExtractionComplete(false);
@@ -1080,7 +1097,6 @@ export default function App() {
 
         es.onopen = () => {
           console.log('[Frontend SSE] connected');
-          setPipelineStage(1); // Fetching Streams
           setLogs(prev => [...prev, { text: `[system] SSE Stream connected. Slicing in progress...`, type: 'system' }]);
         };
 
@@ -1089,28 +1105,12 @@ export default function App() {
             const data = JSON.parse(evt.data);
             if (data.type === 'status') {
               setStatusMessage(data.message);
-              // Map known status messages to pipeline stages
-              const msg = (data.message || '').toLowerCase();
-              if (msg.includes('fetching') || msg.includes('next stream')) {
-                setPipelineStage(1);
-              } else if (msg.includes('downloading')) {
-                setPipelineStage(2);
-              } else if (msg.includes('finalizing')) {
-                setPipelineStage(3);
-              }
               setLogs(prev => [...prev, { text: `[info] ${data.message}`, type: 'info' }]);
             } else if (data.type === 'progress') {
               console.log('[Frontend SSE] progress update');
               const { stage, pct } = data.message;
               setStatusMessage(stage);
               setProgress(pct);
-              // Advance pipeline stage based on stage message
-              const stageLower = (stage || '').toLowerCase();
-              if (stageLower.includes('finalizing')) {
-                setPipelineStage(3);
-              } else if (stageLower.includes('downloading') || pct > 0) {
-                setPipelineStage(2);
-              }
               setLogs(prev => [...prev, { text: `[info] ${stage} (${pct.toFixed(1)}%)`, type: 'info' }]);
             } else if (data.type === 'cookie_error') {
               setCookiesExpired(true);
@@ -1121,7 +1121,6 @@ export default function App() {
               setStatusMessage('');
               setExtracting(false);
               setCurrentStep(0);
-              setPipelineStage(0);
               es.close();
               console.log('[Frontend SSE] eventsource closed');
               setLogs(prev => [...prev, { text: `[error] Authentication error: ${data.message}`, type: 'error' }]);
@@ -1131,7 +1130,6 @@ export default function App() {
               setStatusMessage('');
               setExtracting(false);
               setCurrentStep(0);
-              setPipelineStage(0);
               es.close();
               console.log('[Frontend SSE] eventsource closed');
               setLogs(prev => [...prev, { text: `[error] Technical error: ${data.message}`, type: 'error' }]);
@@ -1147,7 +1145,6 @@ export default function App() {
           setExtractionFailed(false);
           setLastError('');
           setProgress(100);
-          setPipelineStage(4);
           setStatusMessage('Download ready.');
           setLogs(prev => [...prev, { text: `[success] Clip extraction completed successfully!`, type: 'success' }]);
 
@@ -1808,41 +1805,24 @@ export default function App() {
               <div className="space-y-4 pt-2 border-t border-slate-900/40">
                 <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">6. Download & Progress</label>
 
-                {/* Case A: Success Card */}
+/* Case A: Success Card */
                 {extractionComplete && (
-                  <div className="w-full bg-emerald-950/20 border border-emerald-500/25 rounded-2xl p-6 text-center space-y-4 shadow-xl animate-fade-in">
-                    <div className="mx-auto w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                      <CheckCircle2 className="w-6 h-6 animate-bounce" />
+                  <div className="w-full bg-emerald-950/15 border border-emerald-500/20 rounded-2xl p-5 text-center space-y-4 shadow-xl animate-fade-in">
+                    <div className="mx-auto w-11 h-11 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
+                      <CheckCircle2 className="w-5.5 h-5.5 animate-bounce" />
                     </div>
                     <div className="space-y-1">
                       <h3 className="font-display font-800 text-base text-white">Extraction Successful!</h3>
-                      <p className="text-xs text-slate-400">Your custom clip is ready for download.</p>
+                      <p className="text-xs text-slate-400">Your custom clip is ready.</p>
                     </div>
 
-                    <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5 max-w-sm mx-auto grid grid-cols-2 gap-2 text-left font-mono text-[11px]">
-                      <div>
-                        <span className="text-slate-500 block text-[9px] uppercase font-bold">Quality</span>
-                        <span className="text-slate-200 font-semibold">{retryPayload?.quality || selectedQuality}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block text-[9px] uppercase font-bold">Format</span>
-                        <span className="text-slate-200 font-semibold">{(retryPayload?.format || selectedFormat).toUpperCase()}</span>
-                      </div>
-                      <div className="col-span-2 pt-1 border-t border-slate-900 mt-1 flex justify-between">
-                        <span className="text-slate-500">Duration:</span>
-                        <span className="text-indigo-300 font-semibold">
-                          {retryPayload ? secsToHMS(hmsToSecs(retryPayload.end) - hmsToSecs(retryPayload.start)) : secsToHMS(clipLen)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-2.5 max-w-sm mx-auto">
+                    <div className="flex flex-col sm:flex-row gap-2.5 max-w-sm mx-auto pt-1">
                        <a
                         href={`/api/download/${extractedFileId || jobHistory[0]?.id}`}
                         download={`CropTube_Clip_${extractedFileId || jobHistory[0]?.id}.${(retryPayload?.format || selectedFormat) === 'webm-audio' ? 'webm' : (retryPayload?.format || selectedFormat)}`}
-                        className="flex-1 py-3 bg-white hover:bg-slate-100 text-slate-950 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-95"
+                        className="flex-1 py-2.5 bg-white hover:bg-slate-100 text-slate-950 rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95"
                       >
-                        <Download className="w-4 h-4" /> Download Clip
+                        <Download className="w-3.5 h-3.5" /> Download
                       </a>
                       <button
                         onClick={() => {
@@ -1853,9 +1833,9 @@ export default function App() {
                           setStatusMessage('');
                           setLogs([]);
                         }}
-                        className="py-3 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95"
+                        className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95"
                       >
-                        Slice Another
+                        Extract Another
                       </button>
                     </div>
                   </div>
@@ -1863,9 +1843,9 @@ export default function App() {
 
                 {/* Case B: Failed Card */}
                 {extractionFailed && (
-                  <div className="w-full bg-rose-950/20 border border-rose-500/25 rounded-2xl p-6 text-center space-y-4 shadow-xl animate-fade-in">
-                    <div className="mx-auto w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                      <AlertCircle className="w-6 h-6 animate-pulse" />
+                  <div className="w-full bg-rose-950/15 border border-rose-500/20 rounded-2xl p-5 text-center space-y-4 shadow-xl animate-fade-in">
+                    <div className="mx-auto w-11 h-11 rounded-full bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400">
+                      <AlertCircle className="w-5.5 h-5.5 animate-pulse" />
                     </div>
                     <div className="space-y-1">
                       <h3 className="font-display font-800 text-base text-white">Extraction Failed</h3>
@@ -1873,42 +1853,25 @@ export default function App() {
                         {(() => {
                           const lower = (lastError || '').toLowerCase();
                           if (lower.includes('confirm you\'re not a bot') || lower.includes('confirm your age') || lower.includes('cookie') || lower.includes('auth')) {
-                            return 'YouTube authentication required. Try re-uploading cookies.';
+                            return 'YouTube authentication required. Please update cookies in Settings.';
                           }
                           if (lower.includes('format') || lower.includes('requested format') || lower.includes('unavailable')) {
-                            return 'Requested format unavailable. Select another quality and retry.';
+                            return 'The requested quality or format is unavailable for this video.';
                           }
                           if (lower.includes('timeout') || lower.includes('timed out') || lower.includes('connection lost')) {
-                            return 'Extraction timed out. Please try again.';
+                            return 'The extraction request timed out. Please try again.';
                           }
-                          return 'An unexpected technical issue occurred during clip extraction.';
+                          return 'An unexpected issue occurred. Check Advanced Diagnostics below.';
                         })()}
                       </p>
                     </div>
 
-                    {/* Collapsible Technical details */}
-                    <div className="max-w-sm mx-auto text-left">
-                      <button
-                        onClick={() => setShowTechnicalDetails(v => !v)}
-                        className="w-full flex justify-between items-center px-3 py-2 bg-slate-950/60 border border-slate-900 hover:border-slate-800 rounded-lg text-[10px] font-mono text-slate-400 transition-all"
-                      >
-                        <span>{showTechnicalDetails ? '▼ Hide Technical Details' : '▶ View Technical Details'}</span>
-                        <span className="text-[8px] text-rose-400 bg-rose-950/40 border border-rose-900/30 px-1.5 py-0.5 rounded">Error Trace</span>
-                      </button>
-                      
-                      {showTechnicalDetails && (
-                        <div className="mt-1.5 p-3 bg-black/80 border border-rose-950/50 rounded-lg text-[9px] text-rose-400/90 font-mono max-h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                          {lastError || 'No technical traceback available.'}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-2.5 max-w-sm mx-auto">
+                    <div className="flex flex-col sm:flex-row gap-2.5 max-w-sm mx-auto pt-1">
                       <button
                         onClick={() => handleExtract(retryPayload)}
-                        className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-95"
+                        className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95"
                       >
-                        Retry Extraction
+                        Retry
                       </button>
                       <button
                         onClick={() => {
@@ -1919,9 +1882,9 @@ export default function App() {
                           setStatusMessage('');
                           setLogs([]);
                         }}
-                        className="py-3 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95"
+                        className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95"
                       >
-                        Reset Configuration
+                        Extract Another
                       </button>
                     </div>
                   </div>
@@ -1929,9 +1892,9 @@ export default function App() {
 
                 {/* Case E: Server Busy Card */}
                 {serverBusy && !extracting && !extractionComplete && !extractionFailed && (
-                  <div className="w-full bg-amber-950/20 border border-amber-500/25 rounded-2xl p-6 text-center space-y-4 shadow-xl animate-fade-in">
-                    <div className="mx-auto w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                      <Loader2 className="w-6 h-6" />
+                  <div className="w-full bg-amber-950/15 border border-amber-500/20 rounded-2xl p-5 text-center space-y-4 shadow-xl animate-fade-in">
+                    <div className="mx-auto w-11 h-11 rounded-full bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400">
+                      <Loader2 className="w-5.5 h-5.5 animate-spin" />
                     </div>
                     <div className="space-y-1">
                       <h3 className="font-display font-800 text-base text-white">⏳ Extraction Queue Full</h3>
@@ -1942,12 +1905,12 @@ export default function App() {
                         Please wait until it finishes, then try again.
                       </p>
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-2.5 max-w-sm mx-auto">
+                    <div className="flex flex-col sm:flex-row gap-2.5 max-w-sm mx-auto pt-1">
                       <button
                         onClick={() => handleExtract(retryPayload)}
-                        className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-95"
+                        className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95"
                       >
-                        <RefreshCw className="w-4 h-4" /> Try Again
+                        <RefreshCw className="w-3.5 h-3.5" /> Try Again
                       </button>
                       <button
                         onClick={() => {
@@ -1956,7 +1919,7 @@ export default function App() {
                           setProgress(0);
                           setStatusMessage('');
                         }}
-                        className="py-3 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95"
+                        className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95"
                       >
                         Dismiss
                       </button>
@@ -1966,30 +1929,47 @@ export default function App() {
 
                 {/* Case C: Active Extraction (Progress Card) */}
                 {extracting && !extractionComplete && !extractionFailed && (
-                  <div className="w-full bg-slate-900/50 border border-slate-800/80 rounded-2xl p-5 space-y-4 shadow-inner">
+                  <div className="w-full bg-slate-900/40 border border-slate-800/85 rounded-2xl p-5 space-y-4 shadow-xl animate-fade-in">
+                    {/* Current Status */}
                     <div className="flex justify-between items-center text-xs">
-                      <div className="flex items-center gap-2 font-semibold">
+                      <div className="flex items-center gap-2">
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                        <span className="text-indigo-400">{statusMessage || 'Processing clip...'}</span>
+                        <span className="text-slate-400 font-medium">Status:</span>
+                        <span className="text-white font-semibold">{statusMessage || 'Processing clip...'}</span>
                       </div>
-                      <span className="font-mono font-bold text-slate-300">{progress.toFixed(1)}%</span>
+                      <span className="font-mono font-bold text-indigo-400 text-sm">{progress.toFixed(1)}%</span>
                     </div>
 
-                    <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden relative border border-slate-900">
+                    {/* Progress Bar */}
+                    <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden relative border border-slate-900">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 transition-all duration-300 ease-out relative"
                         style={{ width: `${progress}%` }}
                       >
-                        <div className="absolute inset-0 bg-white/25 animate-pulse" />
+                        <div className="absolute inset-0 bg-white/20 animate-pulse" />
                       </div>
                     </div>
 
-                    {/* Stage Timeline */}
-                    <div className="pt-2 border-t border-slate-950/40">
-                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-2">Extraction Pipeline Lifecycle</p>
-                      
-                      {/* Responsive Timeline Grid */}
-                      <div className="grid grid-cols-5 gap-1.5 text-center">
+                    {/* Active Stage & Pipeline */}
+                    <div className="pt-2 border-t border-slate-900/60 space-y-2">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-slate-500 font-medium">Active Stage:</span>
+                        <span className="text-indigo-300 font-bold">
+                          {(() => {
+                            const stages = [
+                              'Preparing Job',
+                              'Fetching Streams',
+                              'Processing Clip',
+                              'Finalizing Output',
+                              'Download Ready'
+                            ];
+                            return stages[pipelineStage] || 'Preparing';
+                          })()}
+                        </span>
+                      </div>
+
+                      {/* Timeline dots representing stages */}
+                      <div className="flex items-center justify-between gap-1 pt-1">
                         {[
                           'Preparing Job',
                           'Fetching Streams',
@@ -1997,20 +1977,17 @@ export default function App() {
                           'Finalizing Output',
                           'Download Ready'
                         ].map((stageLabel, idx) => {
-                          // pipelineStage is driven directly by SSE events, never by string matching
                           const isPast = idx < pipelineStage;
                           const isActive = idx === pipelineStage;
                           
-                          let bgClass = 'bg-slate-950 border-slate-900 text-slate-600';
-                          if (isPast) bgClass = 'bg-emerald-950/20 border-emerald-900/50 text-emerald-400';
-                          else if (isActive) bgClass = 'bg-indigo-950/40 border-indigo-500/30 text-indigo-300 shadow-sm border-dashed animate-pulse';
+                          let dotColor = 'bg-slate-800 border-slate-700';
+                          if (isPast) dotColor = 'bg-emerald-500 border-emerald-400';
+                          else if (isActive) dotColor = 'bg-indigo-500 border-indigo-400 animate-pulse';
 
                           return (
-                            <div key={stageLabel} className="space-y-1.5 flex flex-col items-center">
-                              <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-bold font-mono transition-all ${bgClass}`}>
-                                {isPast ? '✓' : idx + 1}
-                              </div>
-                              <span className={`text-[8px] font-medium leading-none block line-clamp-2 ${isActive ? 'text-indigo-300 font-bold' : isPast ? 'text-slate-400' : 'text-slate-600'}`}>
+                            <div key={stageLabel} className="flex-1 flex flex-col items-center relative">
+                              <div className={`w-2.5 h-2.5 rounded-full border ${dotColor} transition-all duration-300`} />
+                              <span className={`text-[8px] mt-1 font-medium transition-colors duration-200 hidden sm:block ${isActive ? 'text-indigo-300 font-bold' : isPast ? 'text-slate-400' : 'text-slate-600'}`}>
                                 {stageLabel}
                               </span>
                             </div>
@@ -2019,9 +1996,30 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="flex justify-between text-[9px] text-slate-500 font-mono pt-1">
-                      <span>Processed: {secsToHMS(Math.round((progress / 100) * clipLen))}</span>
-                      <span>Target: {secsToHMS(clipLen)}</span>
+                    {/* Metadata Grid (Quality, Duration, Est. Size) */}
+                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-900/60 text-center">
+                      <div className="bg-slate-950/40 border border-slate-850 rounded-xl p-2">
+                        <span className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold">Quality</span>
+                        <span className="text-xs font-semibold text-slate-200 mt-0.5 block">
+                          {retryPayload?.quality || selectedQuality} ({ (retryPayload?.format || selectedFormat).toUpperCase() })
+                        </span>
+                      </div>
+                      <div className="bg-slate-950/40 border border-slate-850 rounded-xl p-2">
+                        <span className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold">Duration</span>
+                        <span className="text-xs font-semibold text-slate-200 mt-0.5 block">
+                          {secsToHMS(retryPayload ? (hmsToSecs(retryPayload.end) - hmsToSecs(retryPayload.start)) : clipLen)}
+                        </span>
+                      </div>
+                      <div className="bg-slate-950/40 border border-slate-850 rounded-xl p-2">
+                        <span className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold">Est. Size</span>
+                        <span className="text-xs font-semibold text-indigo-400 mt-0.5 block">
+                          {estimateOutputSize(
+                            retryPayload?.quality || selectedQuality,
+                            retryPayload?.format || selectedFormat,
+                            retryPayload ? (hmsToSecs(retryPayload.end) - hmsToSecs(retryPayload.start)) : clipLen
+                          )}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2041,8 +2039,7 @@ export default function App() {
                     Extract &amp; Download Clip
                   </button>
                 )}
-
-                {/* Advanced Diagnostics — Collapsible Log Viewer */}
+                                {/* Advanced Diagnostics — Collapsible Log Viewer */}
                 {(extracting || extractionFailed || extractionComplete || serverBusy || logs.length > 0) && (
                   <div className="space-y-1">
                     <button
