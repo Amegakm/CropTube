@@ -5,6 +5,7 @@ import {
   Zap, Shield, Wifi, Clock, Ban, Music,
   Info, BookOpen, Briefcase, FileText, Lock, ChevronRight, Star, RefreshCw
 } from 'lucide-react';
+import CustomDropdown from './CustomDropdown.jsx';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -413,7 +414,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
 
         {/* Hero input + CTA */}
         <div className="animate-fade-in-up animation-delay-300 max-w-xl mx-auto space-y-3.5">
-          <div className="hero-input-wrap spotlight">
+          <div className="hero-input-wrap">
             <Search className="w-4 h-4 text-slate-500 flex-shrink-0" />
             <input
               ref={inputRef}
@@ -423,7 +424,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
               onChange={e => setHeroUrl(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Paste YouTube URL or type search keywords…"
-              className="flex-1 bg-transparent outline-none text-sm text-slate-200 placeholder-slate-500 min-w-0"
+              className="flex-1 bg-transparent outline-none border-none shadow-none text-sm text-slate-200 placeholder-slate-500 min-w-0 focus:outline-none focus:ring-0 focus:shadow-none"
             />
             {heroUrl && (
               <button
@@ -714,6 +715,54 @@ export default function App() {
     return (item.title || '').toLowerCase().includes(q) || (item.url || '').toLowerCase().includes(q);
   }), [jobHistory, historySearchQuery]);
 
+  // Memoized format options
+  const formatOptions = useMemo(() => [
+    {
+      group: 'Video Formats',
+      items: availableVideoFormats.map(f => ({ value: f, label: f.toUpperCase() }))
+    },
+    {
+      group: 'Audio Formats',
+      items: availableAudioFormats.map(f => ({ value: f, label: f.toUpperCase() }))
+    }
+  ], [availableVideoFormats, availableAudioFormats]);
+
+  // Memoized quality options based on selectedFormat
+  const qualityOptions = useMemo(() => {
+    const isAudio = selectedFormat === 'mp3' || selectedFormat === 'm4a';
+    if (isAudio) {
+      return [
+        {
+          group: 'Audio Quality',
+          items: [
+            { value: 'audio-320', label: '320kbps (High)' },
+            { value: 'audio-256', label: '256kbps' },
+            { value: 'audio-192', label: '192kbps (Medium)' },
+            { value: 'audio-128', label: '128kbps (Standard)' },
+            { value: 'audio-m4a', label: 'Original Quality' }
+          ]
+        }
+      ];
+    }
+
+    const getQualityLabel = (r) => {
+      if (r === '2160p' || r === '4K') return '4K (2160p Video)';
+      if (r === '1440p' || r === '2K') return '2K (1440p Video)';
+      if (r === '1080p') return '1080p (Full HD Video)';
+      if (r === '720p') return '720p (HD Video)';
+      if (r === '480p') return '480p (Standard Video)';
+      if (r === '360p') return '360p (Low Video)';
+      return r;
+    };
+
+    return [
+      {
+        group: 'Video Quality',
+        items: availableResolutions.map(r => ({ value: r, label: getQualityLabel(r) }))
+      }
+    ];
+  }, [selectedFormat, availableResolutions]);
+
   const playerRef = useRef(null);
   const ytApiReady = useRef(false);
   const terminalEndRef = useRef(null);
@@ -741,11 +790,11 @@ export default function App() {
     }
   }, [logs, autoScroll]);
 
-  // ── Spotlight cursor-glow: update --sx / --sy CSS vars on the active hovered .spotlight element ──
+  // ── Spotlight cursor-glow: update --sx / --sy on the nearest .spotlight or .spotlight-open ──
   useEffect(() => {
     let frameId = null;
     const onMove = (e) => {
-      const el = e.target.closest('.spotlight');
+      const el = e.target.closest('.spotlight, .spotlight-open');
       if (!el) return;
       if (frameId) return;
       frameId = requestAnimationFrame(() => {
@@ -1533,7 +1582,7 @@ export default function App() {
                 </button>
 
                 {showCookies && (
-                  <div className="p-3 bg-slate-950/60 border border-amber-900/30 rounded-xl space-y-2.5">
+                  <div className="p-3 bg-slate-950/60 border border-amber-900/30 rounded-xl space-y-2.5 spotlight">
                     <div className="text-[9px] text-amber-400/80 bg-amber-950/20 border border-amber-900/30 rounded-lg p-2 leading-relaxed">
                       <strong className="text-amber-400">⚠ Required on cloud servers.</strong> YouTube blocks datacenter IPs.
                       Export cookies using <span className="font-mono bg-black/40 px-1 rounded">"Get cookies.txt LOCALLY"</span> Chrome extension → paste below → Register.
@@ -1574,7 +1623,7 @@ export default function App() {
             {/* 2. LOAD VIDEO URL */}
             <div className="space-y-2">
               <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">2. Load Video URL</label>
-              <div className="relative">
+              <div className="spotlight-open relative">
                 <input
                   type="text"
                   value={youtubeUrl}
@@ -1588,7 +1637,7 @@ export default function App() {
                   aria-label="YouTube URL or search query"
                   className="w-full pl-3 pr-20 py-3 bg-slate-900/40 border border-slate-800 focus:border-indigo-500
                     rounded-xl outline-none text-xs text-slate-200 placeholder-slate-600
-                    transition-all focus:ring-1 focus:ring-indigo-500/20 focus-visible:ring-2 focus-visible:ring-indigo-500/40 disabled:opacity-50"
+                    transition-all disabled:opacity-50"
                 />
                 <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                   {youtubeUrl && !extracting && (
@@ -1728,12 +1777,11 @@ export default function App() {
               <div className="space-y-2">
                 <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">5. Format &amp; Quality</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
+                  <div className="spotlight-control space-y-1">
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Format</span>
-                    <select
+                    <CustomDropdown
                       value={selectedFormat}
-                      onChange={e => {
-                        const fmt = e.target.value;
+                      onChange={fmt => {
                         setSelectedFormat(fmt);
                         if (fmt === 'mp3' || fmt === 'm4a') {
                           setSelectedQuality('audio-320');
@@ -1741,57 +1789,21 @@ export default function App() {
                           setSelectedQuality(availableResolutions.includes('1080p') ? '1080p' : (availableResolutions[0] || '1080p'));
                         }
                       }}
+                      options={formatOptions}
                       disabled={extracting}
                       aria-label="Output format"
-                      className="w-full bg-slate-900/40 border border-slate-800 focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/40 text-slate-300
-                        py-3 px-3 rounded-xl outline-none text-xs transition-colors disabled:opacity-50"
-                    >
-                      <optgroup label="Video Formats">
-                        {availableVideoFormats.map(f => (
-                          <option key={f} value={f}>{f.toUpperCase()}</option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="Audio Formats">
-                        {availableAudioFormats.map(f => (
-                          <option key={f} value={f}>{f.toUpperCase()}</option>
-                        ))}
-                      </optgroup>
-                    </select>
+                    />
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="spotlight-control space-y-1">
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Quality</span>
-                    <select
+                    <CustomDropdown
                       value={selectedQuality}
-                      onChange={e => setSelectedQuality(e.target.value)}
+                      onChange={val => setSelectedQuality(val)}
+                      options={qualityOptions}
                       disabled={extracting}
                       aria-label="Output quality"
-                      className="w-full bg-slate-900/40 border border-slate-800 focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/40 text-slate-300
-                        py-3 px-3 rounded-xl outline-none text-xs transition-colors disabled:opacity-50"
-                    >
-                      {selectedFormat === 'mp3' || selectedFormat === 'm4a' ? (
-                        <optgroup label="Audio Quality">
-                          <option value="audio-320">320kbps (High)</option>
-                          <option value="audio-256">256kbps</option>
-                          <option value="audio-192">192kbps (Medium)</option>
-                          <option value="audio-128">128kbps (Standard)</option>
-                          <option value="audio-m4a">Original Quality</option>
-                        </optgroup>
-                      ) : (
-                        <optgroup label="Video Quality">
-                          {availableResolutions.map(r => (
-                            <option key={r} value={r}>
-                              {r === '2160p' || r === '4K' ? '4K (2160p Video)' :
-                               r === '1440p' || r === '2K' ? '2K (1440p Video)' :
-                               r === '1080p' ? '1080p (Full HD Video)' :
-                               r === '720p' ? '720p (HD Video)' :
-                               r === '480p' ? '480p (Standard Video)' :
-                               r === '360p' ? '360p (Low Video)' : r}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
+                    />
                   </div>
                 </div>
                 {videoId && clipLen > 0 && (
@@ -2027,7 +2039,7 @@ export default function App() {
                   <button
                     onClick={() => handleExtract()}
                     disabled={!videoId || clipLen <= 0 || selectedFormatId === 'none' || selectedFormatId === '' || isLoadingFormats}
-                    className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all duration-200
+                    className={`spotlight w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all duration-200
                       ${!videoId || clipLen <= 0 || selectedFormatId === 'none' || selectedFormatId === '' || isLoadingFormats
                         ? 'bg-slate-900/40 text-slate-600 border border-slate-900 cursor-not-allowed'
                         : 'bg-white hover:bg-slate-100 text-slate-950 shadow-lg hover:scale-[1.01] active:scale-[0.99]'

@@ -154,11 +154,11 @@ select option {
 .dynamic-mesh-bg {
   background-color: #02040a;
   background-image:
-    radial-gradient(circle at 20% 30%, rgba(37, 99, 235, 0.22) 0%, transparent 45%),
-    radial-gradient(circle at 80% 70%, rgba(128, 0, 32, 0.25) 0%, transparent 50%),
-    radial-gradient(circle at 50% 20%, rgba(29, 78, 216, 0.18) 0%, transparent 40%),
-    radial-gradient(circle at 10% 80%, rgba(153, 27, 27, 0.2) 0%, transparent 45%),
-    radial-gradient(circle at 90% 10%, rgba(59, 130, 246, 0.15) 0%, transparent 35%);
+    radial-gradient(circle at 20% 30%, rgba(37, 99, 235, 0.20) 0%, transparent 45%),
+    radial-gradient(circle at 80% 70%, rgba(79, 70, 229, 0.18) 0%, transparent 50%),
+    radial-gradient(circle at 50% 20%, rgba(29, 78, 216, 0.16) 0%, transparent 40%),
+    radial-gradient(circle at 10% 80%, rgba(109, 40, 217, 0.14) 0%, transparent 45%),
+    radial-gradient(circle at 90% 10%, rgba(59, 130, 246, 0.12) 0%, transparent 35%);
   background-size: 200% 200%;
   animation: meshDrift 20s ease infinite alternate;
 }
@@ -190,8 +190,8 @@ select option {
   position: absolute;
   inset: 0;
   background: radial-gradient(
-    220px circle at var(--sx, -9999px) var(--sy, -9999px),
-    rgba(99,102,241,0.1) 0%,
+    200px circle at var(--sx, -9999px) var(--sy, -9999px),
+    rgba(99,102,241,0.09) 0%,
     transparent 80%
   );
   opacity: 0;
@@ -235,7 +235,7 @@ select option {
 }
 
 /* ──────────────────────────────────────────────────────────
-   Hero Input
+   Hero Input — single focus border owned by the wrapper
    ─────────────────────────────────────────────────────────── */
 .hero-input-wrap {
   display: flex;
@@ -251,8 +251,16 @@ select option {
   box-shadow: 0 2px 12px -4px rgba(0,0,0,0.35);
 }
 .hero-input-wrap:focus-within {
-  border-color: rgba(99,102,241,0.55);
-  box-shadow: 0 0 0 4px rgba(99,102,241,0.1), 0 2px 12px -4px rgba(0,0,0,0.35);
+  border-color: rgba(99,102,241,0.5);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.1), 0 2px 12px -4px rgba(0,0,0,0.35);
+}
+/* Suppress ALL inner focus indicators on the actual input element inside the hero wrap.
+   Focus state is owned exclusively by .hero-input-wrap:focus-within above. */
+.hero-input-wrap input:focus,
+.hero-input-wrap input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -600,35 +608,201 @@ select option {
   }
 }
 
-/* ────────────────────────────────────────────────────────
-   Spotlight cursor-following glow system
-   Cursor position injected via JS: --sx / --sy on each .spotlight element
-   ─────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════
+   SPOTLIGHT CURSOR-FOLLOWING GLOW SYSTEM
+   ════════════════════════════════════════════════════════════
+   Architecture:
+   - JS (requestAnimationFrame, event delegation) injects --sx / --sy
+     CSS custom properties on the nearest .spotlight ancestor.
+   - The ::after pseudo-element renders the glow using those vars.
+   - overflow: hidden clips the glow inside each card boundary.
+   - Disabled for touch devices and prefers-reduced-motion users.
+   - Only indigo/violet colors — no red/magenta.
+   ─────────────────────────────────────────────────────────── */
+
+/* Base: card-shaped spotlight elements clip their glow */
 .spotlight {
   position: relative;
   isolation: isolate;
+  overflow: hidden;       /* Clamp glow inside card boundary */
 }
+
+/* The glow layer — always below content (z-index: 0) */
 .spotlight::after {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
   background: radial-gradient(
-    190px circle at var(--sx, -9999px) var(--sy, -9999px),
-    rgba(99,102,241,0.13) 0%,
+    180px circle at var(--sx, -9999px) var(--sy, -9999px),
+    rgba(99,102,241,0.10) 0%,
+    rgba(99,102,241,0.04) 50%,
     transparent 75%
   );
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.35s ease;
-  z-index: -1;
+  z-index: 0;
 }
+
+/* Reveal on hover */
 .spotlight:hover::after {
   opacity: 1;
 }
-/* Elements that have their own ::after (cta-btn) must not clash */
+
+/* All direct children float above the glow layer */
+.spotlight > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Exceptions: elements with their own pseudo-elements ── */
+
+/* bento-card uses ::before for its own gradient — suppress generic ::after */
+.bento-card::after {
+  display: none !important;
+}
+
+/* cta-btn uses ::before and ::after for shimmer/shine — suppress spotlight */
 .cta-btn.spotlight::after {
   display: none !important;
+}
+
+/* ── Spotlight variant for controls that contain dropdown menus ─────────────
+   Uses overflow: visible so the dropdown can escape the card boundary.
+   The glow is clipped by the trigger button's own border-radius instead. */
+.spotlight-control {
+  position: relative;
+  isolation: isolate;
+  overflow: visible;        /* Allow dropdown menus to escape */
+}
+/* Raise the entire stacking context of the control when the dropdown is open */
+.spotlight-control:has([aria-expanded="true"]) {
+  z-index: 50 !important;
+}
+.spotlight-control::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    180px circle at var(--sx, -9999px) var(--sy, -9999px),
+    rgba(99,102,241,0.10) 0%,
+    rgba(99,102,241,0.04) 50%,
+    transparent 75%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+  z-index: 0;
+  /* Clip the glow to the trigger area, not to overflow */
+  clip-path: inset(0 round 12px);
+}
+.spotlight-control:hover::after {
+  opacity: 1;
+}
+.spotlight-control > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CUSTOM DROPDOWN COMPONENT
+   ════════════════════════════════════════════════════════════ */
+
+/* Open animation */
+@keyframes dropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-dropdown-in {
+  animation: dropdownIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: top center;
+}
+
+/* Menu container */
+.custom-dropdown-menu {
+  background: rgba(8, 12, 26, 0.98);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow:
+    0 20px 40px -8px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(99, 102, 241, 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+/* Scrollbar inside the menu */
+.custom-dropdown-menu::-webkit-scrollbar { width: 4px; }
+.custom-dropdown-menu::-webkit-scrollbar-track { background: transparent; }
+.custom-dropdown-menu::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.3); border-radius: 9999px; }
+
+/* Trigger button — no browser chrome */
+.custom-dropdown-trigger {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Suppress spotlight glow from bleeding under the trigger when menu is open */
+.spotlight-control:has(.custom-dropdown-menu)::after {
+  opacity: 0 !important;
+}
+
+/* ── URL input wrapper: needs overflow visible for the dropdown ── */
+/* Applied via .spotlight-open class instead of .spotlight */
+.spotlight-open {
+  position: relative;
+  isolation: isolate;
+  overflow: visible;      /* Allow dropdown to escape */
+}
+.spotlight-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    180px circle at var(--sx, -9999px) var(--sy, -9999px),
+    rgba(99,102,241,0.10) 0%,
+    rgba(99,102,241,0.04) 50%,
+    transparent 75%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+  z-index: 0;
+}
+.spotlight-open:hover::after {
+  opacity: 1;
+}
+/* spotlight-open children: only non-absolute elements get z-index 1 */
+.spotlight-open > *:not([style*="position:absolute"]):not(.absolute) {
+  position: relative;
+  z-index: 1;
+}
+/* Absolute overlays (dropdown, button) inside open wrapper stay above glow */
+.spotlight-open > .absolute {
+  z-index: 2;
+}
+
+/* ── Touch devices: disable spotlight ── */
+@media (hover: none) {
+  .spotlight::after,
+  .spotlight-open::after {
+    display: none;
+  }
+}
+
+/* ── Reduced motion: disable spotlight ── */
+@media (prefers-reduced-motion: reduce) {
+  .spotlight::after,
+  .spotlight-open::after {
+    display: none;
+  }
 }
 
 /* ────────────────────────────────────────────────────────
@@ -663,8 +837,17 @@ select option {
   animation: shimmerSweep 0.65s ease-out forwards;
 }
 
-/* Improve focus-visible ring visibility on interactive elements */
+/* ────────────────────────────────────────────────────────
+   Global focus-visible ring for keyboard navigation
+   Suppressed on hero input (handled by .hero-input-wrap:focus-within)
+   ─────────────────────────────────────────────────────── */
 :focus-visible {
   outline: 2px solid rgba(99,102,241,0.7);
   outline-offset: 2px;
+}
+
+/* Hero input inner element: no native focus ring, ever */
+.hero-input-wrap input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
