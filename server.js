@@ -748,9 +748,17 @@ function runStaleFileSweeper() {
         // 4. Age Guard: Must be older than 30 minutes
         const ageMs = now - stats.mtimeMs;
         if (ageMs > 30 * 60 * 1000) {
-          fs.unlinkSync(filePath);
-          filesDeleted++;
-          appLogger('info', 'Sweeper', `Deleted stale file: ${file} (age: ${Math.round(ageMs / 1000 / 60)}m)`);
+          // Defensive Path Guard
+          const resolvedPath = path.resolve(filePath);
+          const resolvedTempDir = path.resolve(tempDir);
+          const resolvedGlobalCookiePath = path.resolve(globalCookiePath);
+          if (resolvedPath.startsWith(resolvedTempDir) && resolvedPath !== resolvedGlobalCookiePath && !file.includes('global_cookies')) {
+            fs.unlinkSync(filePath);
+            filesDeleted++;
+            appLogger('info', 'Sweeper', `Deleted stale file: ${file} (age: ${Math.round(ageMs / 1000 / 60)}m)`);
+          } else {
+            appLogger('warn', 'Sweeper', `Blocked deletion of unauthorized path: ${filePath}`);
+          }
         }
       } catch (fileErr) {
         appLogger('error', 'Sweeper', `Error processing file ${file}: ${fileErr.message}`);
@@ -788,8 +796,15 @@ function runPeriodicCleanup() {
       // Clean up temporary cookie file
       if (job.hasCookies && job.cookiePath && fs.existsSync(job.cookiePath)) {
         try {
-          fs.unlinkSync(job.cookiePath);
-          console.log(`[Cleanup] Deleted temporary cookie file for stale job ${fileId}`);
+          const resolvedPath = path.resolve(job.cookiePath);
+          const resolvedTempDir = path.resolve(tempDir);
+          const resolvedGlobalCookiePath = path.resolve(globalCookiePath);
+          if (resolvedPath.startsWith(resolvedTempDir) && resolvedPath !== resolvedGlobalCookiePath && !resolvedPath.includes('global_cookies')) {
+            fs.unlinkSync(job.cookiePath);
+            console.log(`[Cleanup] Deleted temporary cookie file for stale job ${fileId}`);
+          } else {
+            console.warn(`[Cleanup] Blocked deletion of unauthorized path: ${job.cookiePath}`);
+          }
         } catch (e) {}
       }
       
@@ -802,8 +817,15 @@ function runPeriodicCleanup() {
       [outputPath, partPath].forEach(p => {
         if (fs.existsSync(p)) {
           try {
-            fs.unlinkSync(p);
-            console.log(`[Cleanup] Deleted temporary output file: ${p}`);
+            const resolvedPath = path.resolve(p);
+            const resolvedTempDir = path.resolve(tempDir);
+            const resolvedGlobalCookiePath = path.resolve(globalCookiePath);
+            if (resolvedPath.startsWith(resolvedTempDir) && resolvedPath !== resolvedGlobalCookiePath && !resolvedPath.includes('global_cookies')) {
+              fs.unlinkSync(p);
+              console.log(`[Cleanup] Deleted temporary output file: ${p}`);
+            } else {
+              console.warn(`[Cleanup] Blocked deletion of unauthorized path: ${p}`);
+            }
           } catch (e) {}
         }
       });
@@ -894,7 +916,16 @@ app.post('/api/extract/initiate', extractLimiter, (req, res) => {
       if (activeJobs.has(fileId)) {
         const job = activeJobs.get(fileId);
         if (job.hasCookies && job.cookiePath && fs.existsSync(job.cookiePath)) {
-          try { fs.unlinkSync(job.cookiePath); } catch (e) {}
+          try {
+            const resolvedPath = path.resolve(job.cookiePath);
+            const resolvedTempDir = path.resolve(tempDir);
+            const resolvedGlobalCookiePath = path.resolve(globalCookiePath);
+            if (resolvedPath.startsWith(resolvedTempDir) && resolvedPath !== resolvedGlobalCookiePath && !resolvedPath.includes('global_cookies')) {
+              fs.unlinkSync(job.cookiePath);
+            } else {
+              console.warn(`[Timeout Cleanup] Blocked deletion of unauthorized path: ${job.cookiePath}`);
+            }
+          } catch (e) {}
         }
         activeJobs.delete(fileId);
       }
@@ -1180,9 +1211,16 @@ app.get('/api/extract/stream', async (req, res) => {
 
     if (hasCookies && fs.existsSync(cookiePath)) {
       try {
-        fs.unlinkSync(cookiePath);
-        console.log(`[Cookies] Deleted temporary job cookie file`);
-        console.log(`[Cleanup] Deleted temporary Netscape cookie file for Job: ${fileId}`);
+        const resolvedPath = path.resolve(cookiePath);
+        const resolvedTempDir = path.resolve(tempDir);
+        const resolvedGlobalCookiePath = path.resolve(globalCookiePath);
+        if (resolvedPath.startsWith(resolvedTempDir) && resolvedPath !== resolvedGlobalCookiePath && !resolvedPath.includes('global_cookies')) {
+          fs.unlinkSync(cookiePath);
+          console.log(`[Cookies] Deleted temporary job cookie file`);
+          console.log(`[Cleanup] Deleted temporary Netscape cookie file for Job: ${fileId}`);
+        } else {
+          console.warn(`[Cleanup] Blocked deletion of unauthorized path: ${cookiePath}`);
+        }
       } catch (unlinkErr) {
         console.error('[Cleanup] Failed to delete temporary cookie file:', unlinkErr);
       }
@@ -1194,8 +1232,15 @@ app.get('/api/extract/stream', async (req, res) => {
       [outputPath, partPath].forEach(p => {
         try {
           if (fs.existsSync(p)) {
-            fs.unlinkSync(p);
-            console.log(`[Cleanup] Deleted incomplete file: ${p}`);
+            const resolvedPath = path.resolve(p);
+            const resolvedTempDir = path.resolve(tempDir);
+            const resolvedGlobalCookiePath = path.resolve(globalCookiePath);
+            if (resolvedPath.startsWith(resolvedTempDir) && resolvedPath !== resolvedGlobalCookiePath && !resolvedPath.includes('global_cookies')) {
+              fs.unlinkSync(p);
+              console.log(`[Cleanup] Deleted incomplete file: ${p}`);
+            } else {
+              console.warn(`[Cleanup] Blocked deletion of unauthorized path: ${p}`);
+            }
           }
         } catch (unlinkErr) {
           console.error(`[Cleanup] Failed to delete incomplete file ${p}:`, unlinkErr);
@@ -1403,18 +1448,13 @@ app.post('/api/settings/cookies', (req, res) => {
   }
 });
 
-// Delete global cookies from the server
+// Delete global cookies from the server (RESTRICTED: Telegram only)
 app.delete('/api/settings/cookies', (req, res) => {
-  try {
-    if (fs.existsSync(globalCookiePath)) {
-      fs.unlinkSync(globalCookiePath);
-      console.log('[Settings] Deleted pre-registered global server-side cookies file.');
-    }
-    res.json({ success: true });
-  } catch (err) {
-    console.error('[Settings] Failed to delete global cookies file:', err);
-    res.status(500).json({ success: false, error: `Failed to purge cookies file on server: ${err.message}`, code: 'COOKIE_DELETE_FAILED' });
-  }
+  return res.status(403).json({
+    success: false,
+    error: 'Forbidden: Global cookies may only be deleted through an authorized admin action (e.g. Telegram /remove command).',
+    code: 'FORBIDDEN'
+  });
 });
 
 // Controlled Telegram monitoring verification endpoint (development-only)
@@ -2127,8 +2167,15 @@ app.get('/api/download/:fileId', (req, res) => {
     // Delete file immediately after response closes (always run cleanup)
     try {
       if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        console.log(`[Delivery] Surgically purged temporary file: ${filePath}`);
+        const resolvedPath = path.resolve(filePath);
+        const resolvedTempDir = path.resolve(tempDir);
+        const resolvedGlobalCookiePath = path.resolve(globalCookiePath);
+        if (resolvedPath.startsWith(resolvedTempDir) && resolvedPath !== resolvedGlobalCookiePath && !resolvedPath.includes('global_cookies')) {
+          fs.unlinkSync(filePath);
+          console.log(`[Delivery] Surgically purged temporary file: ${filePath}`);
+        } else {
+          console.warn(`[Delivery] Blocked deletion of unauthorized path: ${filePath}`);
+        }
       }
     } catch (unlinkErr) {
       console.error('[Delivery] Error deleting file:', unlinkErr);

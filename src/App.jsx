@@ -741,17 +741,25 @@ export default function App() {
     }
   }, [logs, autoScroll]);
 
-  // ── Spotlight cursor-glow: update --sx / --sy CSS vars on all .spotlight elements ──
+  // ── Spotlight cursor-glow: update --sx / --sy CSS vars on the active hovered .spotlight element ──
   useEffect(() => {
+    let frameId = null;
     const onMove = (e) => {
-      document.querySelectorAll('.spotlight').forEach(el => {
+      const el = e.target.closest('.spotlight');
+      if (!el) return;
+      if (frameId) return;
+      frameId = requestAnimationFrame(() => {
         const r = el.getBoundingClientRect();
         el.style.setProperty('--sx', `${e.clientX - r.left}px`);
         el.style.setProperty('--sy', `${e.clientY - r.top}px`);
+        frameId = null;
       });
     };
     window.addEventListener('mousemove', onMove, { passive: true });
-    return () => window.removeEventListener('mousemove', onMove);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      if (frameId) cancelAnimationFrame(frameId);
+    };
   }, []);
 
   // ── Enter dashboard from hero ─────────────────────────────────────────────
@@ -1009,13 +1017,6 @@ export default function App() {
       .catch((err) => alert(err.message));
   };
 
-  const deleteCookies = () => {
-    if (!confirm('Delete cloud cookies?')) return;
-    fetch('/api/settings/cookies', { method: 'DELETE' })
-      .then(r => r.json())
-      .then(() => { setHasGlobalCookies(false); setCookies(''); })
-      .catch(() => { });
-  };
 
   // ── History recovery handlers ─────────────────────────────────────────────
   const handleReloadSettings = (item) => {
@@ -1547,25 +1548,22 @@ export default function App() {
                         text-[9px] text-slate-400 font-mono rounded-lg outline-none resize-none
                         placeholder-slate-700 disabled:opacity-50 transition-colors"
                     />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={saveCookies}
-                        disabled={!cookies.trim() || extracting}
-                        className="btn-shimmer flex-1 py-2.5 rounded-lg text-[10px] font-bold transition-all
-                          bg-amber-600 hover:bg-amber-500 text-white
-                          disabled:bg-slate-900 disabled:text-slate-600 disabled:cursor-not-allowed"
-                      >
-                        Register on Server
-                      </button>
-                      {hasGlobalCookies && (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex gap-2">
                         <button
-                          onClick={deleteCookies}
-                          disabled={extracting}
-                          className="btn-shimmer px-3 py-2.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40
-                            text-rose-400 rounded-lg text-[10px] font-semibold transition-all"
+                          onClick={saveCookies}
+                          disabled={!cookies.trim() || extracting}
+                          className="btn-shimmer flex-1 py-2.5 rounded-lg text-[10px] font-bold transition-all
+                            bg-amber-600 hover:bg-amber-500 text-white
+                            disabled:bg-slate-900 disabled:text-slate-600 disabled:cursor-not-allowed"
                         >
-                          Purge
+                          Register on Server
                         </button>
+                      </div>
+                      {hasGlobalCookies && (
+                        <div className="text-[9px] text-slate-400 bg-slate-950 border border-slate-900/80 rounded-lg p-2 leading-normal">
+                          ℹ️ <strong className="text-slate-300">Server-side cookies active:</strong> Deletion is restricted to the Telegram Admin bot via `/remove` command.
+                        </div>
                       )}
                     </div>
                   </div>
