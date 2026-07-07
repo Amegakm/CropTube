@@ -341,32 +341,56 @@ function ytdlpEnv() {
   return { ...process.env, PYTHONUNBUFFERED: '1', HOME: tempDir, XDG_CACHE_HOME: cacheDir };
 }
 
-function getCommonArgsConfig(quality = '', customCookiePath = null) {
-  const cookiePath = customCookiePath || globalCookiePath;
-  const cookieExists = fs.existsSync(cookiePath);
-  let cookieSize = 0;
-  if (cookieExists) {
-    try {
-      cookieSize = fs.statSync(cookiePath).size;
-    } catch (_) {}
-  }
-  
+function resolveCookieSource(jobCookiesText = null, fileId = null) {
   const cookiesFromBrowser = process.env.YT_DLP_COOKIES_FROM_BROWSER;
-  const hasValidCookies = (cookieExists && cookieSize > 0) || !!cookiesFromBrowser;
-
+  
+  // 1. If we have browser cookies configured, we use that
   if (cookiesFromBrowser) {
-    console.log(`[Cookies] Using cookies from browser: ${cookiesFromBrowser}`);
-  } else if (customCookiePath && fs.existsSync(customCookiePath)) {
-    console.log(`[Cookies] Using temporary job cookie file`);
-  } else if (!customCookiePath && fs.existsSync(globalCookiePath)) {
-    console.log(`[Cookies] Using global cookie file`);
-    if (cookieSize === 0) {
-      sendTelegramAlert('Cookie Persistence', 'N/A', 'N/A', 'N/A', 'Global cookie file size became 0 bytes.', 'N/A');
+    return { source: 'browser', path: cookiesFromBrowser, hasCookies: true, isTemporary: false };
+  }
+
+  // 2. If the job explicitly provided new cookies, write to temp file
+  if (jobCookiesText && jobCookiesText.trim() && fileId) {
+    const tempPath = path.join(tempDir, `cookies_${fileId}.txt`);
+    try {
+      fs.writeFileSync(tempPath, jobCookiesText.trim(), 'utf8');
+      return { source: 'temporary', path: tempPath, hasCookies: true, isTemporary: true };
+    } catch (err) {
+      console.error('[Cookies] Failed to write temporary cookie file:', err);
     }
   }
 
-  // If cookies are active, prioritize 'tv_embedded,web_embedded,web' since 'web' alone suffers from SABR (missing URL) blocks.
-  // Otherwise, use the standard android_vr,web,android client stack.
+  // 3. Fall back to the server-side global_cookies.txt
+  const globalExists = fs.existsSync(globalCookiePath);
+  let globalSize = 0;
+  if (globalExists) {
+    try {
+      globalSize = fs.statSync(globalCookiePath).size;
+    } catch (_) {}
+  }
+
+  if (globalExists && globalSize > 0) {
+    return { source: 'global', path: globalCookiePath, hasCookies: true, isTemporary: false };
+  }
+
+  return { source: 'none', path: null, hasCookies: false, isTemporary: false };
+}
+
+function getCommonArgsConfig(quality = '', customCookiePath = null, customSource = null) {
+  let cookieConf;
+  if (customCookiePath || customSource) {
+    cookieConf = {
+      path: customCookiePath,
+      source: customSource || (customCookiePath === globalCookiePath ? 'global' : 'temporary'),
+      hasCookies: !!customCookiePath
+    };
+  } else {
+    cookieConf = resolveCookieSource();
+  }
+
+  const hasValidCookies = cookieConf.hasCookies;
+  // Use tv_embedded first (avoids JS n-challenge requirement), then fall back to web_embedded and web.
+  // tv_embedded provides the best compatibility when cookies are present without needing a JS runtime.
   const playerClient = hasValidCookies ? 'tv_embedded,web_embedded,web' : 'android_vr,web,android';
 
   const args = [
@@ -376,19 +400,20 @@ function getCommonArgsConfig(quality = '', customCookiePath = null) {
     '--cache-dir', cacheDir,
   ];
 
-  if (cookiesFromBrowser) {
-    args.push('--cookies-from-browser', cookiesFromBrowser);
-    if (!customCookiePath) {
-      lastCookieUsedTime = Date.now();
-    }
-  } else if (hasValidCookies) {
-    args.push('--cookies', cookiePath);
-    if (!customCookiePath) {
-      lastCookieUsedTime = Date.now();
-    }
+  if (cookieConf.source === 'browser') {
+    args.push('--cookies-from-browser', cookieConf.path);
+    lastCookieUsedTime = Date.now();
+  } else if (hasValidCookies && cookieConf.path) {
+    args.push('--cookies', cookieConf.path);
+    lastCookieUsedTime = Date.now();
   }
 
-  return { args, playerClient, cookieExists, cookieSize };
+  return { 
+    args, 
+    playerClient, 
+    cookieExists: cookieConf.source === 'global' ? fs.existsSync(globalCookiePath) : hasValidCookies, 
+    cookieSize: cookieConf.source === 'global' && fs.existsSync(globalCookiePath) ? fs.statSync(globalCookiePath).size : 0 
+  };
 }
 
 function commonArgs(quality = '', customCookiePath = null) {
@@ -420,11 +445,11 @@ app.get('/api/search', searchLimiter, async (req, res) => {
     '--extractor-args', 'youtube:skip=hls,dash,player,configs'
   ];
 
-  const cookiesFromBrowser = process.env.YT_DLP_COOKIES_FROM_BROWSER;
-  if (cookiesFromBrowser) {
-    args.push('--cookies-from-browser', cookiesFromBrowser);
-  } else if (fs.existsSync(globalCookiePath)) {
-    args.push('--cookies', globalCookiePath);
+  const cookieConf = resolveCookieSource();
+  if (cookieConf.source === 'browser') {
+    args.push('--cookies-from-browser', cookieConf.path);
+  } else if (cookieConf.hasCookies && cookieConf.path) {
+    args.push('--cookies', cookieConf.path);
   }
 
   console.log(`[Search] Executing search for query: "${q}"`);
@@ -503,8 +528,6 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
 
   args.push(url);
 
-  console.log(`[Formats] Cookie file exists: ${config.cookieExists}, size: ${config.cookieSize} bytes`);
-
   const child = spawn(ytdlpCmd, args, { env: ytdlpEnv() });
   let stdoutData = '';
   let stderrData = '';
@@ -522,21 +545,41 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
       appLogger('error', 'Formats', `yt-dlp failed with exit code ${code}: ${stderrData}`);
       
       const isBot = stderrData.includes("Sign in to confirm you're not a bot") || 
-                    stderrData.includes("Sign in to confirm you’re not a bot") || 
                     stderrData.includes("Sign in to confirm your age");
+      const isCookieExpired = stderrData.includes('no longer valid') ||
+                              stderrData.includes('rotated in the browser') ||
+                              (stderrData.includes('cookie') && stderrData.includes('expired'));
+      const isSignatureFail = stderrData.includes('Signature solving failed') ||
+                              stderrData.includes('n challenge solving failed');
       
-      const errorMsg = isBot
-        ? (config.cookieExists 
-            ? "YouTube bot detection triggered. Your pre-registered cookies may be expired or invalid. Please update your session cookies in Settings."
-            : "YouTube bot detection triggered. Please register YouTube authentication cookies in Settings to bypass this on cloud/datacenter IPs.")
-        : "Failed to retrieve video formats.";
+      let errorMsg;
+      let errorCode = 'FORMATS_FAILED';
+      let statusCode = 500;
+
+      if (isCookieExpired) {
+        errorMsg = 'Your YouTube authentication cookies have expired and been rotated. Please export fresh cookies from your browser and update them in Settings.';
+        errorCode = 'COOKIE_EXPIRED';
+        statusCode = 403;
+      } else if (isBot) {
+        errorMsg = config.cookieExists 
+          ? 'YouTube bot detection triggered. Your pre-registered cookies may be expired or invalid. Please update your session cookies in Settings.'
+          : 'YouTube bot detection triggered. Please register YouTube authentication cookies in Settings to bypass this on cloud/datacenter IPs.';
+        errorCode = 'BOT_DETECTION';
+        statusCode = 403;
+      } else if (isSignatureFail) {
+        errorMsg = 'YouTube requires a JavaScript runtime for signature solving. Please ensure valid authentication cookies are configured in Settings.';
+        errorCode = 'SIGNATURE_FAILED';
+        statusCode = 403;
+      } else {
+        errorMsg = 'Failed to retrieve video formats.';
+      }
 
       sendTelegramAlert('Format Retrieval', url, 'N/A', 'N/A', stderrData, 'N/A');
 
-      return res.status(isBot ? 403 : 500).json({
+      return res.status(statusCode).json({
         success: false,
         error: errorMsg,
-        code: isBot ? 'BOT_DETECTION' : 'FORMATS_FAILED'
+        code: errorCode
       });
     }
 
@@ -544,12 +587,6 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
       appLogger('info', 'Formats', `Successfully resolved formats for video ${url}`);
       const parsed = JSON.parse(stdoutData);
       const formats = parsed.formats || [];
-      
-      // 1. Log the first 10 raw formats returned by yt-dlp per Requirement 1
-      console.log("[Formats Debug] First 10 raw formats returned by yt-dlp:");
-      formats.slice(0, 10).forEach((f, idx) => {
-        console.log(`  [Raw Format #${idx + 1}] format_id: ${f.format_id}, ext: ${f.ext}, width: ${f.width || 'N/A'}, height: ${f.height || 'N/A'}, resolution: ${f.resolution || 'N/A'}, vcodec: ${f.vcodec || 'none'}, acodec: ${f.acodec || 'none'}`);
-      });
 
       // Helper function to classify format quality based on format_note, resolution, and width/height aspect ratios
       const classifyFormatQuality = (f) => {
@@ -650,11 +687,6 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
       console.log(`  - Number of formats returned: ${formats.length}`);
       console.log(`  - Filtered video formats with standard heights: ${videoFormats.length}`);
       console.log(`  - Available heights: ${availableHeights.join(', ')}`);
-
-      // Log Raw height, Display label, format_id (Requirement 7)
-      videoFormats.forEach(f => {
-        console.log(`height=${f.height} label=${f.label} format_id=${f.format_id}`);
-      });
 
       const rawFormats = formats.map(f => {
         const label = f.vcodec !== 'none' ? classifyFormatQuality(f) : null;
@@ -806,7 +838,7 @@ function runPeriodicCleanup() {
       }
       
       // Clean up temporary cookie file
-      if (job.hasCookies && job.cookiePath && fs.existsSync(job.cookiePath)) {
+      if (job.isTemporaryCookie && job.cookiePath && fs.existsSync(job.cookiePath)) {
         try {
           const resolvedPath = path.resolve(job.cookiePath);
           const resolvedTempDir = path.resolve(tempDir);
@@ -858,11 +890,7 @@ app.post('/api/extract/initiate', extractLimiter, (req, res) => {
   try {
     const { url, start, end, format, quality, format_id, cookies } = req.body;
     
-    const loggedBody = { ...req.body };
-    if (loggedBody.cookies) {
-      loggedBody.cookies = '[REDACTED]';
-    }
-    console.log(`[Initiate Backend Log] Request body received:`, JSON.stringify(loggedBody, null, 2));
+    console.log(`[Initiate] Received extraction initiation request.`);
 
     // 1. Concurrent Extraction Protection
     const currentActiveCount = getActiveExtractionsCount();
@@ -889,23 +917,7 @@ app.post('/api/extract/initiate', extractLimiter, (req, res) => {
     console.log(`[Initiate] Job request: quality=${quality}, format_id=${format_id || 'none'}`);
 
     const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    const cookiePath = path.join(tempDir, `cookies_${fileId}.txt`);
-    let hasCookies = false;
-
-    if (cookies && cookies.trim()) {
-      try {
-        fs.writeFileSync(cookiePath, cookies.trim(), 'utf8');
-        hasCookies = true;
-        console.log(`[Cookies] Cached temporary Netscape cookie file for Job: ${fileId}`);
-      } catch (err) {
-        console.error('[Cookies] Failed to write temporary cookie file:', err);
-        return res.status(500).json({
-          success: false,
-          error: 'Failed to register authentication cookies on server.',
-          code: 'COOKIE_WRITE_FAILED'
-        });
-      }
-    }
+    const cookieSource = resolveCookieSource(cookies, fileId);
 
     // Register job
     activeJobs.set(fileId, {
@@ -915,8 +927,10 @@ app.post('/api/extract/initiate', extractLimiter, (req, res) => {
       format: format || 'mp4',
       quality,
       format_id,
-      hasCookies,
-      cookiePath,
+      hasCookies: cookieSource.hasCookies,
+      cookiePath: cookieSource.path,
+      cookieSource: cookieSource.source,
+      isTemporaryCookie: cookieSource.isTemporary,
       status: 'initiated',
       createdAt: Date.now()
     });
@@ -927,7 +941,7 @@ app.post('/api/extract/initiate', extractLimiter, (req, res) => {
     setTimeout(() => {
       if (activeJobs.has(fileId)) {
         const job = activeJobs.get(fileId);
-        if (job.hasCookies && job.cookiePath && fs.existsSync(job.cookiePath)) {
+        if (job.isTemporaryCookie && job.cookiePath && fs.existsSync(job.cookiePath)) {
           try {
             const resolvedPath = path.resolve(job.cookiePath);
             const resolvedTempDir = path.resolve(tempDir);
@@ -1008,7 +1022,7 @@ app.get('/api/extract/stream', async (req, res) => {
   }
 
   const job = activeJobs.get(fileId);
-  const { url, start, end, format, quality, format_id, hasCookies, cookiePath } = job;
+  const { url, start, end, format, quality, format_id, hasCookies, cookiePath, cookieSource, isTemporaryCookie } = job;
 
   // Basic validation of start/end format
   const timeRegex = /^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
@@ -1060,7 +1074,7 @@ app.get('/api/extract/stream', async (req, res) => {
     ? null
     : 'ffmpeg:-c copy -avoid_negative_ts make_zero -loglevel warning';
 
-  const config = getCommonArgsConfig(quality, hasCookies ? cookiePath : null);
+  const config = getCommonArgsConfig(quality, hasCookies ? cookiePath : null, cookieSource);
   const args = [
     ...config.args,
     '--download-sections', `*${start}-${end}`,
@@ -1221,7 +1235,7 @@ app.get('/api/extract/stream', async (req, res) => {
       console.log(`[Cookies] Preserved global cookie file`);
     }
 
-    if (hasCookies && fs.existsSync(cookiePath)) {
+    if (isTemporaryCookie && cookiePath && fs.existsSync(cookiePath)) {
       try {
         const resolvedPath = path.resolve(cookiePath);
         const resolvedTempDir = path.resolve(tempDir);
@@ -1307,7 +1321,10 @@ app.get('/api/extract/stream', async (req, res) => {
       const isCookieError = stderrBuffer.includes("Sign in to confirm you're not a bot") ||
                             stderrBuffer.includes("Sign in to confirm you’re not a bot") ||
                             stderrBuffer.includes('Sign in to confirm your age') ||
-                            stderrBuffer.includes('cookies have');
+                            stderrBuffer.includes('cookies have') ||
+                            stderrBuffer.includes('no longer valid') ||
+                            stderrBuffer.includes('rotated in the browser') ||
+                            (stderrBuffer.includes('cookie') && stderrBuffer.includes('expired'));
       
       // Filter out alerts for routine errors
       sendTelegramAlert('Extraction - Process Error', url, quality, format_id, `Exit Code: ${code}\nStderr: ${stderrBuffer.substring(0, 300)}`, fileId);
