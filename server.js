@@ -350,9 +350,13 @@ function getCommonArgsConfig(quality = '', customCookiePath = null) {
       cookieSize = fs.statSync(cookiePath).size;
     } catch (_) {}
   }
-  const hasValidCookies = cookieExists && cookieSize > 0;
+  
+  const cookiesFromBrowser = process.env.YT_DLP_COOKIES_FROM_BROWSER;
+  const hasValidCookies = (cookieExists && cookieSize > 0) || !!cookiesFromBrowser;
 
-  if (customCookiePath && fs.existsSync(customCookiePath)) {
+  if (cookiesFromBrowser) {
+    console.log(`[Cookies] Using cookies from browser: ${cookiesFromBrowser}`);
+  } else if (customCookiePath && fs.existsSync(customCookiePath)) {
     console.log(`[Cookies] Using temporary job cookie file`);
   } else if (!customCookiePath && fs.existsSync(globalCookiePath)) {
     console.log(`[Cookies] Using global cookie file`);
@@ -372,7 +376,12 @@ function getCommonArgsConfig(quality = '', customCookiePath = null) {
     '--cache-dir', cacheDir,
   ];
 
-  if (hasValidCookies) {
+  if (cookiesFromBrowser) {
+    args.push('--cookies-from-browser', cookiesFromBrowser);
+    if (!customCookiePath) {
+      lastCookieUsedTime = Date.now();
+    }
+  } else if (hasValidCookies) {
     args.push('--cookies', cookiePath);
     if (!customCookiePath) {
       lastCookieUsedTime = Date.now();
@@ -411,7 +420,10 @@ app.get('/api/search', searchLimiter, async (req, res) => {
     '--extractor-args', 'youtube:skip=hls,dash,player,configs'
   ];
 
-  if (fs.existsSync(globalCookiePath)) {
+  const cookiesFromBrowser = process.env.YT_DLP_COOKIES_FROM_BROWSER;
+  if (cookiesFromBrowser) {
+    args.push('--cookies-from-browser', cookiesFromBrowser);
+  } else if (fs.existsSync(globalCookiePath)) {
     args.push('--cookies', globalCookiePath);
   }
 
@@ -2216,6 +2228,14 @@ app.listen(PORT, () => {
   console.log(`  report: ${process.env.TELEGRAM_BOT_TOKEN ? 'configured ✓' : 'not configured'}`);
   console.log(`=================================================`);
   
-  // Start bot updates polling
-  startTelegramBotPolling();
+  // Start bot updates polling if not in dev mode (or explicitly enabled)
+  const isDevMode = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'staging';
+  const enablePolling = process.env.ENABLE_TELEGRAM_POLLING === 'true';
+  const disablePolling = process.env.DISABLE_TELEGRAM_POLLING === 'true' || (isDevMode && !enablePolling);
+  
+  if (!disablePolling) {
+    startTelegramBotPolling();
+  } else {
+    console.log('[Telegram Bot] Polling loop disabled in this environment to prevent session conflicts.');
+  }
 });
