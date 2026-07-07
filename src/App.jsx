@@ -127,20 +127,20 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
   };
 
   const borderClass = grabbed
-    ? 'grab-flash border-emerald-500'
+    ? 'grab-flash border-luxury-bronze'
     : !valid
-      ? 'border-rose-500'
-      : 'border-slate-700 focus-within:border-indigo-500';
+      ? 'border-luxury-bronze'
+      : 'border-luxury-cream/20 focus-within:border-luxury-gold/100';
 
   return (
-    <div className="spotlight bg-slate-900/40 border border-slate-800/80 rounded-xl p-3 space-y-2">
+    <div className="spotlight bg-luxury-black/40 border border-luxury-cream/10/80 rounded-xl p-3 space-y-2">
       <div className="flex justify-between items-center">
         <span className={`text-[10px] font-semibold uppercase tracking-wider ${accent}`}>{label}</span>
         {grabbed && (
-          <span className="text-[9px] text-emerald-400 font-mono animate-pulse">✓ Grabbed!</span>
+          <span className="text-[9px] text-luxury-bronze font-mono animate-pulse">✓ Grabbed!</span>
         )}
         {!grabbed && !valid && (
-          <span className="text-[9px] text-rose-400 font-mono">Invalid</span>
+          <span className="text-[9px] text-luxury-bronze font-mono">Invalid</span>
         )}
       </div>
 
@@ -154,7 +154,7 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
         maxLength={8}
         disabled={!playerReady || disabled}
         className={`w-full text-center text-lg font-mono font-bold tracking-widest bg-transparent border-b pb-0.5
-          outline-none transition-all duration-200 text-slate-100
+          outline-none transition-all duration-200 text-luxury-cream
           disabled:opacity-40 disabled:cursor-not-allowed
           ${borderClass}`}
       />
@@ -164,8 +164,8 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
           onClick={handleGrab}
           disabled={!playerReady || disabled}
           className="btn-shimmer flex items-center justify-center gap-1 py-2 sm:py-1 rounded-lg text-xs sm:text-[10px] font-semibold
-            bg-slate-950 hover:bg-slate-800 border border-slate-800
-            text-slate-300 hover:text-white transition-all
+            bg-luxury-black hover:bg-luxury-card border border-luxury-cream/10
+            text-luxury-cream/90 hover:text-luxury-cream transition-all
             disabled:opacity-40 disabled:cursor-not-allowed min-h-[36px] sm:min-h-0"
         >
           <Crosshair className="w-3 h-3 sm:w-2.5 sm:h-2.5" />
@@ -176,8 +176,8 @@ function TimeMarker({ label, accent, value, onChange, onGrab, onSeek, disabled, 
           onClick={handleSeek}
           disabled={!playerReady || disabled}
           className={`btn-shimmer flex items-center justify-center gap-1 py-2 sm:py-1 rounded-lg text-xs sm:text-[10px] font-semibold
-            bg-indigo-950/45 hover:bg-indigo-900/60 border border-indigo-900/50
-            text-indigo-300 hover:text-indigo-100 transition-all
+            bg-luxury-black/45 hover:bg-luxury-gold/60 border border-luxury-gold/50
+            text-luxury-gold hover:text-luxury-black transition-all
             disabled:opacity-40 disabled:cursor-not-allowed min-h-[36px] sm:min-h-0
             ${seeked ? 'seek-pulse' : ''}`}
         >
@@ -196,16 +196,16 @@ function FAQItem({ question, answer, isOpen, onToggle }) {
       <button
         onClick={onToggle}
         aria-expanded={isOpen}
-        className="w-full flex items-center justify-between px-5 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-inset rounded-t-2xl"
+        className="w-full flex items-center justify-between px-5 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-luxury-gold/60 focus-visible:ring-inset rounded-t-2xl"
       >
-        <span className="font-body font-600 text-sm text-slate-200 pr-4">{question}</span>
+        <span className="font-body font-600 text-sm text-luxury-cream pr-4">{question}</span>
         <ChevronDown
-          className="w-4 h-4 text-indigo-400 flex-shrink-0 transition-transform duration-300"
+          className="w-4 h-4 text-luxury-gold flex-shrink-0 transition-transform duration-300"
           style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
         />
       </button>
       <div className={`faq-answer ${isOpen ? 'open' : ''}`}>
-        <p className="px-5 pb-4 text-sm text-slate-400 leading-relaxed font-body">{answer}</p>
+        <p className="px-5 pb-4 text-sm text-luxury-cream/70 leading-relaxed font-body">{answer}</p>
       </div>
     </div>
   );
@@ -234,35 +234,35 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
       border: 'rgba(234,179,8,0.15)',
     },
     {
-      icon: <Shield className="w-6 h-6 text-emerald-400" />,
+      icon: <Shield className="w-6 h-6 text-luxury-bronze" />,
       title: 'Zero Quality Loss',
       desc: 'Stream-copy codec pipeline preserves every pixel. No re-encoding artifacts, ever.',
       color: 'rgba(52,211,153,0.08)',
       border: 'rgba(52,211,153,0.15)',
     },
     {
-      icon: <Shield className="w-6 h-6 text-amber-400" />,
+      icon: <Shield className="w-6 h-6 text-luxury-gold" />,
       title: 'Cloud Auth Support',
       desc: 'Netscape-format cookie injection bypasses datacenter IP blocks. Fully server-side.',
       color: 'rgba(251,146,60,0.08)',
       border: 'rgba(251,146,60,0.15)',
     },
     {
-      icon: <Wifi className="w-6 h-6 text-indigo-400" />,
+      icon: <Wifi className="w-6 h-6 text-luxury-gold" />,
       title: 'Real-Time SSE Logs',
       desc: 'Live extraction progress via Server-Sent Events. Watch your clip materialise in real time.',
       color: 'rgba(99,102,241,0.08)',
       border: 'rgba(99,102,241,0.15)',
     },
     {
-      icon: <Ban className="w-6 h-6 text-rose-400" />,
+      icon: <Ban className="w-6 h-6 text-luxury-bronze" />,
       title: 'No Full Downloads',
       desc: 'yt-dlp downloads only the exact byte range. Cloud bandwidth stays minimal.',
       color: 'rgba(244,63,94,0.08)',
       border: 'rgba(244,63,94,0.15)',
     },
     {
-      icon: <Music className="w-6 h-6 text-violet-400" />,
+      icon: <Music className="w-6 h-6 text-luxury-bronze" />,
       title: 'Audio Re-Sync & FFmpeg',
       desc: 'FFmpeg post-processes audio alignment and container merging for seamless playback.',
       color: 'rgba(167,139,250,0.08)',
@@ -314,7 +314,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
   };
 
   return (
-    <div className="min-h-screen w-full dynamic-mesh-bg font-body text-slate-200 overflow-x-hidden">
+    <div className="min-h-screen w-full dynamic-mesh-bg font-body text-luxury-cream overflow-x-hidden">
 
       {/* ── NAVBAR ──────────────────────────────────────────────── */}
       <nav className="nav-glass sticky top-0 z-50 w-full">
@@ -323,11 +323,11 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
 
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center neon-glow-indigo">
-                <Scissors className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-luxury-gold to-luxury-bronze flex items-center justify-center neon-glow-indigo">
+                <Scissors className="w-4 h-4 text-luxury-cream" />
               </div>
-              <span className="font-display font-800 text-base tracking-tight text-white">
-                Crop<span className="text-indigo-400">Tube</span>
+              <span className="font-display font-800 text-base tracking-tight text-luxury-cream">
+                Crop<span className="text-luxury-gold">Tube</span>
               </span>
             </div>
 
@@ -344,13 +344,13 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setActiveModal('docs')}
-                className="hidden md:flex items-center gap-1.5 px-4 py-1.5 border border-white/10 hover:border-indigo-500/40 hover:bg-indigo-500/10
-                  rounded-full text-[12px] font-semibold text-slate-300 hover:text-white transition-all"
+                className="hidden md:flex items-center gap-1.5 px-4 py-1.5 border border-white/10 hover:border-luxury-gold/100/40 hover:bg-luxury-gold/10
+                  rounded-full text-[12px] font-semibold text-luxury-cream/90 hover:text-luxury-cream transition-all"
               >
                 Docs &amp; Guide ↗
               </button>
               <button
-                className="md:hidden w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white"
+                className="md:hidden w-8 h-8 flex items-center justify-center text-luxury-cream/70 hover:text-luxury-cream"
                 onClick={() => setMobileMenuOpen(v => !v)}
                 aria-label="Toggle menu"
               >
@@ -365,16 +365,16 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
               {navLinks.map(l => (
                 l.modal
                   ? <button key={l.label} onClick={() => { setActiveModal(l.modal); setMobileMenuOpen(false); }}
-                      className="block w-full text-left px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors">
+                      className="block w-full text-left px-3 py-2.5 rounded-lg text-sm text-luxury-cream/90 hover:bg-white/5 hover:text-luxury-cream transition-colors">
                       {l.label}
                     </button>
                   : <button key={l.label} onClick={() => scrollTo(l.id)}
-                      className="block w-full text-left px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors">
+                      className="block w-full text-left px-3 py-2.5 rounded-lg text-sm text-luxury-cream/90 hover:bg-white/5 hover:text-luxury-cream transition-colors">
                       {l.label}
                     </button>
               ))}
               <button onClick={() => { setActiveModal('docs'); setMobileMenuOpen(false); }}
-                className="block w-full text-left px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors">
+                className="block w-full text-left px-3 py-2.5 rounded-lg text-sm text-luxury-cream/90 hover:bg-white/5 hover:text-luxury-cream transition-colors">
                 Docs &amp; Guide ↗
               </button>
             </div>
@@ -392,22 +392,22 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
         />
 
         {/* Badge */}
-        <div className="animate-fade-in inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-indigo-500/25
-          bg-indigo-500/10 text-indigo-300 text-[11px] font-semibold tracking-wide mb-8">
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+        <div className="animate-fade-in inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-luxury-gold/100/25
+          bg-luxury-gold/10 text-luxury-gold text-[11px] font-semibold tracking-wide mb-8">
+          <span className="w-1.5 h-1.5 rounded-full bg-luxury-gold/70 animate-pulse" />
           Cloud Extraction · No Full Downloads · 4K Supported
         </div>
 
         {/* Headline */}
         <h1 className="font-display animate-fade-in-up animation-delay-100
-          text-4xl sm:text-5xl lg:text-[3.6rem] font-extrabold tracking-tight leading-[1.12] text-white mb-6">
+          text-4xl sm:text-5xl lg:text-[3.6rem] font-extrabold tracking-tight leading-[1.12] text-luxury-cream mb-6">
           Surgical{' '}
-          <span className="font-serif italic text-indigo-300">YouTube</span>
+          <span className="font-serif italic text-luxury-gold">YouTube</span>
           <br />Clip Extraction
         </h1>
 
         {/* Sub-headline */}
-        <p className="animate-fade-in-up animation-delay-200 text-slate-300 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto mb-10">
+        <p className="animate-fade-in-up animation-delay-200 text-luxury-cream/90 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto mb-10">
           Extract high-fidelity clips without downloading entire videos.
           Zero quality loss, cloud-based, and instantly ready to download.
         </p>
@@ -415,7 +415,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
         {/* Hero input + CTA */}
         <div className="animate-fade-in-up animation-delay-300 max-w-xl mx-auto space-y-3.5">
           <div className="hero-input-wrap">
-            <Search className="w-4 h-4 text-slate-500 flex-shrink-0" />
+            <Search className="w-4 h-4 text-luxury-sand flex-shrink-0" />
             <input
               ref={inputRef}
               id="hero-url-input"
@@ -424,13 +424,13 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
               onChange={e => setHeroUrl(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Paste YouTube URL or type search keywords…"
-              className="flex-1 bg-transparent outline-none border-none shadow-none text-sm text-slate-200 placeholder-slate-500 min-w-0 focus:outline-none focus:ring-0 focus:shadow-none"
+              className="flex-1 bg-transparent outline-none border-none shadow-none text-sm text-luxury-cream placeholder-slate-500 min-w-0 focus:outline-none focus:ring-0 focus:shadow-none"
             />
             {heroUrl && (
               <button
                 onClick={() => setHeroUrl('')}
                 aria-label="Clear URL"
-                className="text-slate-500 hover:text-rose-400 transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 rounded"
+                className="text-luxury-sand hover:text-luxury-bronze transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-luxury-gold/60 rounded"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -450,7 +450,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
 
         {/* Quick-start chips */}
         <div className="animate-fade-in-up animation-delay-400 flex flex-wrap justify-center gap-2.5 mt-9">
-          <span className="text-[11px] text-slate-500 self-center mr-1">Try:</span>
+          <span className="text-[11px] text-luxury-sand self-center mr-1">Try:</span>
           {quickStarts.map(qs => (
             <button
               key={qs.value}
@@ -470,7 +470,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
       <section className="px-4 sm:px-6 lg:px-8 py-20 max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <h2 className="section-title text-3xl sm:text-4xl mb-3">Built Different</h2>
-          <p className="text-slate-500 text-sm max-w-xl mx-auto">
+          <p className="text-luxury-sand text-sm max-w-xl mx-auto">
             Every feature designed around one principle — extract exactly what you need, nothing more.
           </p>
         </div>
@@ -492,8 +492,8 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
               >
                 {f.icon}
               </div>
-              <h3 className="font-display font-700 text-[15px] text-white mb-2">{f.title}</h3>
-              <p className="text-slate-500 text-[13px] leading-relaxed">{f.desc}</p>
+              <h3 className="font-display font-700 text-[15px] text-luxury-cream mb-2">{f.title}</h3>
+              <p className="text-luxury-sand text-[13px] leading-relaxed">{f.desc}</p>
             </div>
           ))}
         </div>
@@ -503,7 +503,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
       <section id="how-it-works" className="px-4 sm:px-6 lg:px-8 py-20 max-w-5xl mx-auto">
         <div className="text-center mb-12">
           <h2 className="section-title text-3xl sm:text-4xl mb-3">How It Works</h2>
-          <p className="text-slate-500 text-sm max-w-md mx-auto">
+          <p className="text-luxury-sand text-sm max-w-md mx-auto">
             Three steps from URL to clip. No logins, no installs.
           </p>
         </div>
@@ -533,13 +533,13 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
             <React.Fragment key={s.step}>
               <div className="flex flex-col items-center text-center flex-1 px-4">
                 <div
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-display font-800 text-[13px] mb-5 shadow-lg"
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center text-luxury-cream font-display font-800 text-[13px] mb-5 shadow-lg"
                   style={{ background: `linear-gradient(135deg, ${s.color}cc, ${s.color}88)`, boxShadow: `0 8px 24px -6px ${s.color}55` }}
                 >
                   {s.step}
                 </div>
-                <h3 className="font-display font-700 text-white text-[16px] mb-2">{s.title}</h3>
-                <p className="text-slate-500 text-[13px] leading-relaxed max-w-[200px]">{s.desc}</p>
+                <h3 className="font-display font-700 text-luxury-cream text-[16px] mb-2">{s.title}</h3>
+                <p className="text-luxury-sand text-[13px] leading-relaxed max-w-[200px]">{s.desc}</p>
               </div>
               {i < arr.length - 1 && (
                 <div className="timeline-line mt-6 mx-2" />
@@ -550,7 +550,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
 
         {/* Mobile: vertical timeline */}
         <div className="md:hidden space-y-6 relative pl-6">
-          <div className="absolute left-5 top-0 bottom-0 w-px bg-gradient-to-b from-indigo-500/40 via-violet-500/30 to-transparent" />
+          <div className="absolute left-5 top-0 bottom-0 w-px bg-gradient-to-b from-luxury-gold/100/40 via-luxury-gold/30 to-transparent" />
           {[
             { step: '01', title: 'Paste URL', desc: 'Drop a YouTube link or search by keyword.', color: '#6366f1' },
             { step: '02', title: 'Select Range', desc: 'Grab precise start and end timestamps from the player.', color: '#8b5cf6' },
@@ -558,14 +558,14 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
           ].map(s => (
             <div key={s.step} className="flex items-start gap-4 relative">
               <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-display font-700 text-xs flex-shrink-0 -ml-6 relative z-10"
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-luxury-cream font-display font-700 text-xs flex-shrink-0 -ml-6 relative z-10"
                 style={{ background: `linear-gradient(135deg, ${s.color}cc, ${s.color}88)`, boxShadow: `0 4px 16px -4px ${s.color}55` }}
               >
                 {s.step}
               </div>
               <div className="pt-1">
-                <h3 className="font-display font-700 text-white text-sm mb-1">{s.title}</h3>
-                <p className="text-slate-500 text-[13px] leading-relaxed">{s.desc}</p>
+                <h3 className="font-display font-700 text-luxury-cream text-sm mb-1">{s.title}</h3>
+                <p className="text-luxury-sand text-[13px] leading-relaxed">{s.desc}</p>
               </div>
             </div>
           ))}
@@ -576,7 +576,7 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
       <section id="faq" className="px-4 sm:px-6 lg:px-8 py-20 max-w-2xl mx-auto">
         <div className="text-center mb-12">
           <h2 className="section-title text-3xl sm:text-4xl mb-3">Frequently Asked</h2>
-          <p className="text-slate-500 text-sm">Straight answers to real questions.</p>
+          <p className="text-luxury-sand text-sm">Straight answers to real questions.</p>
         </div>
         <div className="space-y-2.5">
           {[
@@ -614,19 +614,19 @@ function LandingPage({ onEnterDashboard, setActiveModal, heroUrl, setHeroUrl }) 
 
       {/* ── FOOTER ──────────────────────────────────────────── */}
       <footer className="border-t border-white/5 px-4 sm:px-6 lg:px-8 py-10 max-w-7xl mx-auto">
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-[11px] text-slate-600">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-[11px] text-luxury-sand">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center">
-              <Scissors className="w-2.5 h-2.5 text-white" />
+            <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-luxury-gold to-luxury-bronze flex items-center justify-center">
+              <Scissors className="w-2.5 h-2.5 text-luxury-cream" />
             </div>
-            <span className="font-display font-600 text-slate-400">CropTube</span>
+            <span className="font-display font-600 text-luxury-cream/70">CropTube</span>
             <span>· © {new Date().getFullYear()} All rights reserved.</span>
           </div>
           <div className="flex flex-wrap justify-center gap-4 sm:gap-5">
-            <button onClick={() => setActiveModal('privacy')} className="hover:text-white transition-colors">Privacy Policy</button>
-            <button onClick={() => setActiveModal('terms')} className="hover:text-white transition-colors">Terms of Service</button>
-            <button onClick={() => setActiveModal('about')} className="hover:text-white transition-colors">About</button>
-            <button onClick={() => setActiveModal('docs')} className="hover:text-white transition-colors">Docs</button>
+            <button onClick={() => setActiveModal('privacy')} className="hover:text-luxury-cream transition-colors">Privacy Policy</button>
+            <button onClick={() => setActiveModal('terms')} className="hover:text-luxury-cream transition-colors">Terms of Service</button>
+            <button onClick={() => setActiveModal('about')} className="hover:text-luxury-cream transition-colors">About</button>
+            <button onClick={() => setActiveModal('docs')} className="hover:text-luxury-cream transition-colors">Docs</button>
           </div>
         </div>
       </footer>
@@ -1287,32 +1287,32 @@ export default function App() {
         {/* Icon + title */}
         <div className="flex items-start gap-4 mb-6">
           <div className="modal-icon-badge" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 8px 24px -6px rgba(99,102,241,0.45)' }}>
-            <Scissors className="w-5 h-5 text-white" />
+            <Scissors className="w-5 h-5 text-luxury-cream" />
           </div>
           <div>
-            <h3 className="font-display text-xl font-800 text-white tracking-tight">About CropTube</h3>
-            <p className="text-xs text-indigo-400 mt-0.5 font-medium">Surgical YouTube clip extraction</p>
+            <h3 className="font-display text-xl font-800 text-luxury-cream tracking-tight">About CropTube</h3>
+            <p className="text-xs text-luxury-gold mt-0.5 font-medium">Surgical YouTube clip extraction</p>
           </div>
         </div>
 
         {/* Feature badges */}
         <div className="flex flex-wrap gap-2 mb-5">
           {['Open Source','4K Supported','Zero Storage','Cloud Auth','SSE Logs','FFmpeg Pipeline'].map(tag => (
-            <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border border-indigo-500/20 bg-indigo-500/8 text-indigo-300">
+            <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border border-luxury-gold/100/20 bg-luxury-gold/100/8 text-luxury-gold">
               <Star className="w-2.5 h-2.5" />{tag}
             </span>
           ))}
         </div>
 
-        <p className="text-sm text-slate-400 leading-relaxed mb-5">
-          CropTube is a premium open-source tool built to extract high-quality clips from YouTube without downloading entire video streams. Powered by <span className="text-slate-300 font-medium">yt-dlp</span> and <span className="text-slate-300 font-medium">FFmpeg</span>, it slices only the exact byte range you need — saving bandwidth and storage.
+        <p className="text-sm text-luxury-cream/70 leading-relaxed mb-5">
+          CropTube is a premium open-source tool built to extract high-quality clips from YouTube without downloading entire video streams. Powered by <span className="text-luxury-cream/90 font-medium">yt-dlp</span> and <span className="text-luxury-cream/90 font-medium">FFmpeg</span>, it slices only the exact byte range you need — saving bandwidth and storage.
         </p>
 
         <div className="grid grid-cols-3 gap-3">
           {[{ label: 'Format Support', value: 'MP4 · MKV · MP3 · M4A' }, { label: 'Max Resolution', value: '4K (2160p)' }, { label: 'Clip Delivery', value: 'Instant download' }].map(s => (
             <div key={s.label} className="bg-white/3 border border-white/5 rounded-xl p-3 text-center">
-              <div className="text-white font-display font-700 text-xs mb-1">{s.value}</div>
-              <div className="text-slate-600 text-[10px]">{s.label}</div>
+              <div className="text-luxury-cream font-display font-700 text-xs mb-1">{s.value}</div>
+              <div className="text-luxury-sand text-[10px]">{s.label}</div>
             </div>
           ))}
         </div>
@@ -1323,10 +1323,10 @@ export default function App() {
       <>
         <div className="flex items-start gap-4 mb-6">
           <div className="modal-icon-badge" style={{ background: 'linear-gradient(135deg,#0ea5e9,#6366f1)', boxShadow: '0 8px 24px -6px rgba(14,165,233,0.35)' }}>
-            <Play className="w-5 h-5 text-white" />
+            <Play className="w-5 h-5 text-luxury-cream" />
           </div>
           <div>
-            <h3 className="font-display text-xl font-800 text-white tracking-tight">How It Works</h3>
+            <h3 className="font-display text-xl font-800 text-luxury-cream tracking-tight">How It Works</h3>
             <p className="text-xs text-sky-400 mt-0.5 font-medium">Five steps from URL to clip</p>
           </div>
         </div>
@@ -1339,10 +1339,10 @@ export default function App() {
             { n: '05', title: 'Extract & Download', desc: 'One click kicks off a cloud extraction job. Your clip downloads automatically when ready.' },
           ].map(step => (
             <div key={step.n} className="flex gap-3 items-start">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white font-display font-700 text-[10px] flex-shrink-0 mt-0.5">{step.n}</div>
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-luxury-gold to-luxury-gold flex items-center justify-center text-luxury-cream font-display font-700 text-[10px] flex-shrink-0 mt-0.5">{step.n}</div>
               <div>
-                <p className="text-sm font-semibold text-slate-200 mb-0.5">{step.title}</p>
-                <p className="text-xs text-slate-500 leading-relaxed">{step.desc}</p>
+                <p className="text-sm font-semibold text-luxury-cream mb-0.5">{step.title}</p>
+                <p className="text-xs text-luxury-sand leading-relaxed">{step.desc}</p>
               </div>
             </div>
           ))}
@@ -1354,23 +1354,23 @@ export default function App() {
       <>
         <div className="flex items-start gap-4 mb-6">
           <div className="modal-icon-badge" style={{ background: 'linear-gradient(135deg,#f59e0b,#ef4444)', boxShadow: '0 8px 24px -6px rgba(245,158,11,0.35)' }}>
-            <Briefcase className="w-5 h-5 text-white" />
+            <Briefcase className="w-5 h-5 text-luxury-cream" />
           </div>
           <div>
-            <h3 className="font-display text-xl font-800 text-white tracking-tight">Services &amp; API</h3>
-            <p className="text-xs text-amber-400 mt-0.5 font-medium">Cloud infrastructure for video extraction</p>
+            <h3 className="font-display text-xl font-800 text-luxury-cream tracking-tight">Services &amp; API</h3>
+            <p className="text-xs text-luxury-gold mt-0.5 font-medium">Cloud infrastructure for video extraction</p>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[
             { icon: <Zap className="w-4 h-4 text-yellow-400" />, title: 'Cloud Extraction', desc: 'Scalable cloud nodes run yt-dlp extraction jobs on demand with dedicated bandwidth.' },
-            { icon: <Shield className="w-4 h-4 text-emerald-400" />, title: 'Cookie Auth', desc: 'Netscape-format cookie injection to bypass datacenter IP restrictions on YouTube.' },
-            { icon: <Wifi className="w-4 h-4 text-indigo-400" />, title: 'SSE Pipeline', desc: 'Real-time progress events streamed to your browser via Server-Sent Events.' },
-            { icon: <BookOpen className="w-4 h-4 text-violet-400" />, title: 'Developer API', desc: 'REST endpoints for search, format detection, clip initiation, and download delivery.' },
+            { icon: <Shield className="w-4 h-4 text-luxury-bronze" />, title: 'Cookie Auth', desc: 'Netscape-format cookie injection to bypass datacenter IP restrictions on YouTube.' },
+            { icon: <Wifi className="w-4 h-4 text-luxury-gold" />, title: 'SSE Pipeline', desc: 'Real-time progress events streamed to your browser via Server-Sent Events.' },
+            { icon: <BookOpen className="w-4 h-4 text-luxury-bronze" />, title: 'Developer API', desc: 'REST endpoints for search, format detection, clip initiation, and download delivery.' },
           ].map(s => (
             <div key={s.title} className="modal-service-card spotlight">
-              <div className="flex items-center gap-2 mb-2">{s.icon}<span className="text-xs font-bold text-slate-200 font-display">{s.title}</span></div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">{s.desc}</p>
+              <div className="flex items-center gap-2 mb-2">{s.icon}<span className="text-xs font-bold text-luxury-cream font-display">{s.title}</span></div>
+              <p className="text-[11px] text-luxury-sand leading-relaxed">{s.desc}</p>
             </div>
           ))}
         </div>
@@ -1381,11 +1381,11 @@ export default function App() {
       <>
         <div className="flex items-start gap-4 mb-6">
           <div className="modal-icon-badge" style={{ background: 'linear-gradient(135deg,#10b981,#0ea5e9)', boxShadow: '0 8px 24px -6px rgba(16,185,129,0.35)' }}>
-            <BookOpen className="w-5 h-5 text-white" />
+            <BookOpen className="w-5 h-5 text-luxury-cream" />
           </div>
           <div>
-            <h3 className="font-display text-xl font-800 text-white tracking-tight">Docs &amp; Guide</h3>
-            <p className="text-xs text-emerald-400 mt-0.5 font-medium">Integration, configuration, and API reference</p>
+            <h3 className="font-display text-xl font-800 text-luxury-cream tracking-tight">Docs &amp; Guide</h3>
+            <p className="text-xs text-luxury-bronze mt-0.5 font-medium">Integration, configuration, and API reference</p>
           </div>
         </div>
         <div className="space-y-4">
@@ -1397,8 +1397,8 @@ export default function App() {
           ].map(section => (
             <div key={section.label}>
               <p className="doc-label">{section.label}</p>
-              <p className="text-xs font-semibold text-slate-300 mb-1">{section.title}</p>
-              <p className="text-[11px] text-slate-500 leading-relaxed font-mono bg-white/2 border border-white/5 rounded-lg px-3 py-2">{section.body}</p>
+              <p className="text-xs font-semibold text-luxury-cream/90 mb-1">{section.title}</p>
+              <p className="text-[11px] text-luxury-sand leading-relaxed font-mono bg-white/2 border border-white/5 rounded-lg px-3 py-2">{section.body}</p>
             </div>
           ))}
         </div>
@@ -1422,10 +1422,10 @@ export default function App() {
         <>
           <div className="flex items-start gap-4 mb-5">
             <div className="modal-icon-badge" style={{ background: isPrivacy ? 'linear-gradient(135deg,#6366f1,#06b6d4)' : 'linear-gradient(135deg,#f43f5e,#fb923c)', boxShadow: isPrivacy ? '0 8px 24px -6px rgba(99,102,241,0.35)' : '0 8px 24px -6px rgba(244,63,94,0.35)' }}>
-              {isPrivacy ? <Lock className="w-5 h-5 text-white" /> : <FileText className="w-5 h-5 text-white" />}
+              {isPrivacy ? <Lock className="w-5 h-5 text-luxury-cream" /> : <FileText className="w-5 h-5 text-luxury-cream" />}
             </div>
             <div>
-              <h3 className="font-display text-xl font-800 text-white tracking-tight">{isPrivacy ? 'Privacy Policy' : 'Terms of Service'}</h3>
+              <h3 className="font-display text-xl font-800 text-luxury-cream tracking-tight">{isPrivacy ? 'Privacy Policy' : 'Terms of Service'}</h3>
               <p className="text-[11px] mt-0.5" style={{ color: isPrivacy ? '#67e8f9' : '#fda4af' }}>Last updated June {new Date().getFullYear()}</p>
             </div>
           </div>
@@ -1433,7 +1433,7 @@ export default function App() {
             {sections.map(s => (
               <div key={s.heading}>
                 <p className="legal-heading">{s.heading}</p>
-                <p className="text-[12px] text-slate-400 leading-relaxed">{s.body}</p>
+                <p className="text-[12px] text-luxury-cream/70 leading-relaxed">{s.body}</p>
               </div>
             ))}
           </div>
@@ -1472,12 +1472,12 @@ export default function App() {
 
           {/* Footer bar */}
           <div className="border-t border-white/5 px-6 sm:px-8 py-4 flex items-center justify-between">
-            <span className="text-[10px] text-slate-600 font-mono">ESC to close</span>
+            <span className="text-[10px] text-luxury-sand font-mono">ESC to close</span>
             <button
               onClick={closeModal}
               aria-label="Close dialog"
               className="flex items-center gap-1.5 px-4 py-2 bg-white/6 hover:bg-white/10 border border-white/8 hover:border-white/15
-                text-white/80 hover:text-white text-xs font-semibold rounded-xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
+                text-luxury-cream/80 hover:text-luxury-cream text-xs font-semibold rounded-xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-luxury-gold/60"
             >
               <X className="w-3.5 h-3.5" /> Close
             </button>
@@ -1504,7 +1504,7 @@ export default function App() {
 
   // ── DASHBOARD ────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen w-full dynamic-mesh-bg flex items-center justify-center p-2 sm:p-6 md:p-8 font-body antialiased text-slate-200">
+    <div className="min-h-screen w-full dynamic-mesh-bg flex items-center justify-center p-2 sm:p-6 md:p-8 font-body antialiased text-luxury-cream">
       {renderModal()}
       <div className="w-full max-w-2xl lg:max-w-[1480px] glass-panel rounded-[24px] sm:rounded-[32px] p-4 sm:p-8 space-y-6 relative overflow-hidden">
 
@@ -1517,34 +1517,34 @@ export default function App() {
             <button
               onClick={() => setShowDashboard(false)}
               aria-label="Return to home page"
-              className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white/70 hover:text-white transition-all text-xs font-bold"
+              className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-luxury-cream/70 hover:text-luxury-cream transition-all text-xs font-bold"
             >
               ←
             </button>
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center neon-glow-indigo">
-              <Scissors className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-luxury-gold to-luxury-bronze flex items-center justify-center neon-glow-indigo">
+              <Scissors className="w-4 h-4 text-luxury-cream" />
             </div>
             <div>
-              <h1 className="font-display font-extrabold text-base sm:text-lg tracking-tight text-white">
-                Crop<span className="text-indigo-400">Tube</span>
+              <h1 className="font-display font-extrabold text-base sm:text-lg tracking-tight text-luxury-cream">
+                Crop<span className="text-luxury-gold">Tube</span>
               </h1>
-              <p className="text-[8px] sm:text-[9px] text-slate-500 uppercase tracking-widest font-semibold">Surgical Extractor</p>
+              <p className="text-[8px] sm:text-[9px] text-luxury-sand uppercase tracking-widest font-semibold">Surgical Extractor</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-[8px] sm:text-[9px] bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-full text-slate-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <div className="flex items-center gap-1.5 text-[8px] sm:text-[9px] bg-luxury-card border border-luxury-cream/10 px-2.5 py-1 rounded-full text-luxury-cream/70">
+            <span className="w-1.5 h-1.5 rounded-full bg-luxury-bronze animate-pulse" />
             <span>Cloud API Active</span>
           </div>
         </div>
 
         {/* Cookies Expired Warning */}
         {cookiesExpired && (
-          <div className="bg-amber-950/40 border border-amber-500/40 rounded-xl p-3 text-[10px] text-amber-400 space-y-1 relative z-10">
+          <div className="bg-luxury-red-dark/10 border border-luxury-gold/30 rounded-xl p-3 text-[10px] text-luxury-gold space-y-1 relative z-10">
             <div className="flex justify-between items-center font-bold">
               <span>⚠️ Cookies Expired</span>
-              <button onClick={() => setCookiesExpired(false)} aria-label="Dismiss cookies expired warning" className="text-amber-600 hover:text-amber-300 transition-colors">✕</button>
+              <button onClick={() => setCookiesExpired(false)} aria-label="Dismiss cookies expired warning" className="text-luxury-gold/70 hover:text-luxury-cream transition-colors">✕</button>
             </div>
-            <p className="text-[9px] text-amber-400/80 leading-normal">
+            <p className="text-[9px] text-luxury-gold/80 leading-normal">
               Export Netscape cookies from Chrome using extension and register them in Cloud Auth settings.
             </p>
           </div>
@@ -1558,33 +1558,33 @@ export default function App() {
 
             {/* 1. YOUTUBE AUTH COOKIES */}
             <div className="space-y-2">
-              <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">1. YouTube Auth Cookies</label>
+              <label className="text-[10px] font-bold tracking-widest text-luxury-sand uppercase">1. YouTube Auth Cookies</label>
               <div className="space-y-1.5">
                 <button
                   onClick={() => setShowCookies(v => !v)}
-                  className="spotlight w-full flex justify-between items-center px-3 py-2.5 rounded-xl bg-slate-900/40 border border-slate-800 hover:border-amber-700/50 transition-all group"
+                  className="spotlight w-full flex justify-between items-center px-3 py-2.5 rounded-xl bg-luxury-black/40 border border-luxury-cream/10 hover:border-luxury-gold/50 transition-all group"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase group-hover:text-amber-400 transition-colors">
+                    <span className="text-[10px] font-bold tracking-widest text-luxury-cream/70 uppercase group-hover:text-luxury-gold transition-colors">
                       🔑 Access Cookies
                     </span>
                     {hasGlobalCookies ? (
-                      <span className="text-[9px] text-emerald-400 bg-emerald-950/50 border border-emerald-800/60 px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active
+                      <span className="text-[9px] text-luxury-bronze bg-emerald-950/50 border border-emerald-800/60 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-luxury-bronze animate-pulse" /> Active
                       </span>
                     ) : (
-                      <span className="text-[9px] text-amber-400 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded-full">
+                      <span className="text-[9px] text-luxury-gold bg-luxury-red-dark/10 border border-luxury-chocolate/40 px-1.5 py-0.5 rounded-full">
                         Required for cloud
                       </span>
                     )}
                   </div>
-                  <span className="text-slate-600 text-[10px]">{showCookies ? '▲' : '▼'}</span>
+                  <span className="text-luxury-sand text-[10px]">{showCookies ? '▲' : '▼'}</span>
                 </button>
 
                 {showCookies && (
-                  <div className="p-3 bg-slate-950/60 border border-amber-900/30 rounded-xl space-y-2.5 spotlight">
-                    <div className="text-[9px] text-amber-400/80 bg-amber-950/20 border border-amber-900/30 rounded-lg p-2 leading-relaxed">
-                      <strong className="text-amber-400">⚠ Required on cloud servers.</strong> YouTube blocks datacenter IPs.
+                  <div className="p-3 bg-luxury-black/60 border border-luxury-chocolate/30 rounded-xl space-y-2.5 spotlight">
+                    <div className="text-[9px] text-luxury-gold/80 bg-luxury-card border border-luxury-chocolate/30 rounded-lg p-2 leading-relaxed">
+                      <strong className="text-luxury-gold">⚠ Required on cloud servers.</strong> YouTube blocks datacenter IPs.
                       Export cookies using <span className="font-mono bg-black/40 px-1 rounded">"Get cookies.txt LOCALLY"</span> Chrome extension → paste below → Register.
                     </div>
                     <textarea
@@ -1593,9 +1593,9 @@ export default function App() {
                       placeholder={'# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t...\tSID\t...'}
                       rows={4}
                       disabled={extracting}
-                      className="w-full p-2.5 bg-black/50 border border-slate-800 focus:border-amber-700/60
-                        text-[9px] text-slate-400 font-mono rounded-lg outline-none resize-none
-                        placeholder-slate-700 disabled:opacity-50 transition-colors"
+                      className="w-full p-2.5 bg-black/50 border border-luxury-cream/10 focus:border-luxury-gold/60
+                        text-[9px] text-luxury-cream/70 font-mono rounded-lg outline-none resize-none
+                        placeholder-luxury-sand/40 disabled:opacity-50 transition-colors"
                     />
                     <div className="flex flex-col gap-2">
                       <div className="flex gap-2">
@@ -1603,15 +1603,15 @@ export default function App() {
                           onClick={saveCookies}
                           disabled={!cookies.trim() || extracting}
                           className="btn-shimmer flex-1 py-2.5 rounded-lg text-[10px] font-bold transition-all
-                            bg-amber-600 hover:bg-amber-500 text-white
-                            disabled:bg-slate-900 disabled:text-slate-600 disabled:cursor-not-allowed"
+                            bg-luxury-gold hover:bg-luxury-gold/90 text-luxury-black text-luxury-cream
+                            disabled:bg-luxury-card disabled:text-luxury-sand disabled:cursor-not-allowed"
                         >
                           Register on Server
                         </button>
                       </div>
                       {hasGlobalCookies && (
-                        <div className="text-[9px] text-slate-400 bg-slate-950 border border-slate-900/80 rounded-lg p-2 leading-normal">
-                          ℹ️ <strong className="text-slate-300">Server-side cookies active:</strong> Deletion is restricted to the Telegram Admin bot via `/remove` command.
+                        <div className="text-[9px] text-luxury-cream/70 bg-luxury-black border border-luxury-chocolate/60 rounded-lg p-2 leading-normal">
+                          ℹ️ <strong className="text-luxury-cream/90">Server-side cookies active:</strong> Deletion is restricted to the Telegram Admin bot via `/remove` command.
                         </div>
                       )}
                     </div>
@@ -1622,7 +1622,7 @@ export default function App() {
 
             {/* 2. LOAD VIDEO URL */}
             <div className="space-y-2">
-              <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">2. Load Video URL</label>
+              <label className="text-[10px] font-bold tracking-widest text-luxury-sand uppercase">2. Load Video URL</label>
               <div className="spotlight-open relative">
                 <input
                   type="text"
@@ -1635,15 +1635,15 @@ export default function App() {
                   placeholder="Paste YouTube link or type search keywords..."
                   disabled={extracting}
                   aria-label="YouTube URL or search query"
-                  className="w-full pl-3 pr-20 py-3 bg-slate-900/40 border border-slate-800 focus:border-indigo-500
-                    rounded-xl outline-none text-xs text-slate-200 placeholder-slate-600
+                  className="w-full pl-3 pr-20 py-3 bg-luxury-black/40 border border-luxury-cream/10 focus:border-luxury-gold
+                    rounded-xl outline-none text-xs text-luxury-cream placeholder-luxury-sand/50
                     transition-all disabled:opacity-50"
                 />
                 <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                   {youtubeUrl && !extracting && (
                     <button
                       onClick={() => { setYoutubeUrl(''); setSearchResults([]); }}
-                      className="text-slate-500 hover:text-rose-400 text-xs transition-colors p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 rounded"
+                      className="text-luxury-sand hover:text-luxury-bronze text-xs transition-colors p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-luxury-gold/60 rounded"
                       aria-label="Clear URL"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -1652,7 +1652,7 @@ export default function App() {
                   <button
                     onClick={handleSearch}
                     disabled={extracting || isSearching || !youtubeUrl.trim()}
-                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
+                    className="bg-luxury-gold hover:bg-luxury-gold/100 disabled:opacity-40 text-luxury-cream rounded-lg p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-luxury-gold/60"
                     aria-label="Search YouTube"
                   >
                     {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
@@ -1662,7 +1662,7 @@ export default function App() {
 
               {/* Search results dropdown */}
               {searchResults.length > 0 && (
-                <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden mt-1.5 max-h-48 overflow-y-auto divide-y divide-slate-900 relative z-20">
+                <div className="bg-luxury-black border border-luxury-cream/10 rounded-xl overflow-hidden mt-1.5 max-h-48 overflow-y-auto divide-y divide-slate-900 relative z-20">
                   {searchResults.map(video => (
                     <button
                       key={video.id}
@@ -1671,16 +1671,16 @@ export default function App() {
                         setVideoTitle(video.title);
                         setSearchResults([]);
                       }}
-                      className="w-full text-left p-2.5 hover:bg-slate-900 flex items-center gap-2.5 transition-colors text-[11px] text-slate-300"
+                      className="w-full text-left p-2.5 hover:bg-luxury-card flex items-center gap-2.5 transition-colors text-[11px] text-luxury-cream/90"
                     >
                       <img
                         src={video.thumbnails[0]?.url || `https://i.ytimg.com/vi/${video.id}/mqdefault.jpg`}
                         alt={video.title}
-                        className="w-16 aspect-video rounded object-cover bg-slate-900 flex-shrink-0"
+                        className="w-16 aspect-video rounded object-cover bg-luxury-card flex-shrink-0"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-200 truncate">{video.title}</p>
-                        <p className="text-slate-500 text-[10px] mt-0.5">{video.uploader} · {secsToHMS(video.duration)}</p>
+                        <p className="font-bold text-luxury-cream truncate">{video.title}</p>
+                        <p className="text-luxury-sand text-[10px] mt-0.5">{video.uploader} · {secsToHMS(video.duration)}</p>
                       </div>
                     </button>
                   ))}
@@ -1688,7 +1688,7 @@ export default function App() {
               )}
 
               {errorMsg && (
-                <div className="flex items-start gap-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] p-2.5 rounded-lg">
+                <div className="flex items-start gap-1.5 bg-luxury-bronze/10 border border-luxury-bronze/20 text-luxury-bronze text-[10px] p-2.5 rounded-lg">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                   {errorMsg}
                 </div>
@@ -1697,22 +1697,22 @@ export default function App() {
 
             {/* 3. VIDEO PREVIEW */}
             <div className="space-y-2">
-              <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">3. Video Preview</label>
+              <label className="text-[10px] font-bold tracking-widest text-luxury-sand uppercase">3. Video Preview</label>
               {videoId ? (
                 <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/5 bg-black relative">
                   <div id="yt-player-wrap" className="w-full h-full" />
                 </div>
               ) : (
-                <div className="w-full aspect-video rounded-2xl border border-dashed border-slate-800 bg-slate-950/50 flex flex-col justify-center items-center gap-3 text-center p-6">
+                <div className="w-full aspect-video rounded-2xl border border-dashed border-luxury-cream/10 bg-luxury-black/50 flex flex-col justify-center items-center gap-3 text-center p-6">
                   <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shadow-lg">
-                    <Play className="w-5 h-5 text-white/50 animate-pulse" />
+                    <Play className="w-5 h-5 text-luxury-cream/50 animate-pulse" />
                   </div>
-                  <p className="text-xs text-white/40 max-w-xs leading-relaxed">
+                  <p className="text-xs text-luxury-cream/40 max-w-xs leading-relaxed">
                     Paste a YouTube URL above to load the video preview stream.
                   </p>
                   <button
                     onClick={() => setShowDashboard(false)}
-                    className="mt-1 text-[10px] text-indigo-300 hover:text-indigo-200 border border-indigo-900/50 bg-indigo-950/25 px-3.5 py-2 rounded-full transition-all"
+                    className="mt-1 text-[10px] text-luxury-gold hover:text-luxury-gold/30 border border-luxury-gold/50 bg-luxury-black/25 px-3.5 py-2 rounded-full transition-all"
                   >
                     ← Return to Home
                   </button>
@@ -1728,11 +1728,11 @@ export default function App() {
 
               {/* 4. RANGE SELECTION */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">4. Range Selection</label>
+                <label className="text-[10px] font-bold tracking-widest text-luxury-sand uppercase">4. Range Selection</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <TimeMarker
                     label="Start"
-                    accent="text-emerald-400"
+                    accent="text-luxury-bronze"
                     value={startTime}
                     onChange={setStartTime}
                     onGrab={() => grabTime(setStartTime)}
@@ -1742,7 +1742,7 @@ export default function App() {
                   />
                   <TimeMarker
                     label="End"
-                    accent="text-rose-400"
+                    accent="text-luxury-bronze"
                     value={endTime}
                     onChange={setEndTime}
                     onGrab={() => grabTime(setEndTime)}
@@ -1755,18 +1755,18 @@ export default function App() {
                 {/* Visual Range Bar */}
                 {duration > 0 && (
                   <div className="space-y-1.5 pt-1">
-                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden relative">
+                    <div className="w-full h-1.5 bg-luxury-card rounded-full overflow-hidden relative">
                       <div
-                        className="absolute h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all"
+                        className="absolute h-full bg-gradient-to-r from-luxury-gold/100 to-luxury-gold rounded-full transition-all"
                         style={{
                           left: `${(hmsToSecs(startTime) / duration) * 100}%`,
                           width: `${Math.max(0.5, (clipLen / duration) * 100)}%`
                         }}
                       />
                     </div>
-                    <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                    <div className="flex justify-between text-[9px] text-luxury-sand font-mono">
                       <span>{startTime}</span>
-                      <span className="text-indigo-400 font-bold">{secsToHMS(clipLen)} selected</span>
+                      <span className="text-luxury-gold font-bold">{secsToHMS(clipLen)} selected</span>
                       <span>{endTime}</span>
                     </div>
                   </div>
@@ -1775,10 +1775,10 @@ export default function App() {
 
               {/* 5. FORMAT & QUALITY */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">5. Format &amp; Quality</label>
+                <label className="text-[10px] font-bold tracking-widest text-luxury-sand uppercase">5. Format &amp; Quality</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="spotlight-control space-y-1">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Format</span>
+                    <span className="text-[10px] font-semibold text-luxury-cream/70 uppercase tracking-wider">Format</span>
                     <CustomDropdown
                       value={selectedFormat}
                       onChange={fmt => {
@@ -1796,7 +1796,7 @@ export default function App() {
                   </div>
 
                   <div className="spotlight-control space-y-1">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Quality</span>
+                    <span className="text-[10px] font-semibold text-luxury-cream/70 uppercase tracking-wider">Quality</span>
                     <CustomDropdown
                       value={selectedQuality}
                       onChange={val => setSelectedQuality(val)}
@@ -1807,33 +1807,33 @@ export default function App() {
                   </div>
                 </div>
                 {videoId && clipLen > 0 && (
-                  <div className="text-[10px] text-slate-400 mt-2.5 flex items-center justify-between bg-slate-900/25 border border-slate-800/40 rounded-xl px-3 py-2 font-mono">
-                    <span className="text-slate-500">Config: {selectedQuality} • {selectedFormat.toUpperCase()}</span>
-                    <span>Estimated Size: <strong className="text-indigo-400">{estimateOutputSize(selectedQuality, selectedFormat, clipLen)}</strong></span>
+                  <div className="text-[10px] text-luxury-cream/70 mt-2.5 flex items-center justify-between bg-luxury-card/25 border border-luxury-cream/10/40 rounded-xl px-3 py-2 font-mono">
+                    <span className="text-luxury-sand">Config: {selectedQuality} • {selectedFormat.toUpperCase()}</span>
+                    <span>Estimated Size: <strong className="text-luxury-gold">{estimateOutputSize(selectedQuality, selectedFormat, clipLen)}</strong></span>
                   </div>
                 )}
               </div>
 
               {/* 6. DOWNLOAD / PROGRESS / SUCCESS / ERROR CARD */}
-              <div className="space-y-3 pt-1 border-t border-slate-900/40">
-                <label className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">6. Download &amp; Progress</label>
+              <div className="space-y-3 pt-1 border-t border-luxury-chocolate/20">
+                <label className="text-[10px] font-bold tracking-widest text-luxury-sand uppercase">6. Download &amp; Progress</label>
 
                 {/* Case A: Success Card */}
                 {extractionComplete && (
-                  <div className="spotlight w-full bg-emerald-950/15 border border-emerald-500/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
-                    <div className="mx-auto w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
+                  <div className="spotlight w-full bg-emerald-950/15 border border-luxury-bronze/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
+                    <div className="mx-auto w-10 h-10 rounded-full bg-luxury-bronze/10 border border-luxury-bronze/25 flex items-center justify-center text-luxury-bronze">
                       <CheckCircle2 className="w-5 h-5" style={{ animation: 'scalePulse 2s ease-in-out infinite' }} />
                     </div>
                     <div className="space-y-0.5">
-                      <h3 className="font-display font-800 text-sm text-white">Extraction Successful!</h3>
-                      <p className="text-xs text-slate-400">Your clip is ready to download.</p>
+                      <h3 className="font-display font-800 text-sm text-luxury-cream">Extraction Successful!</h3>
+                      <p className="text-xs text-luxury-cream/70">Your clip is ready to download.</p>
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2 max-w-sm mx-auto">
                       <a
                         href={`/api/download/${extractedFileId || jobHistory[0]?.id}`}
                         download={`CropTube_Clip_${extractedFileId || jobHistory[0]?.id}.${(retryPayload?.format || selectedFormat) === 'webm-audio' ? 'webm' : (retryPayload?.format || selectedFormat)}`}
-                        className="flex-1 py-2.5 bg-white hover:bg-slate-100 text-slate-950 rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                        className="flex-1 py-2.5 bg-luxury-cream hover:bg-luxury-cream/90 text-luxury-black rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-luxury-bronze/60"
                       >
                         <Download className="w-3.5 h-3.5" /> Download
                       </a>
@@ -1846,7 +1846,7 @@ export default function App() {
                           setStatusMessage('');
                           setLogs([]);
                         }}
-                        className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
+                        className="py-2.5 px-4 bg-luxury-card hover:bg-luxury-card border border-luxury-cream/10 text-luxury-cream/90 hover:text-luxury-cream rounded-xl font-semibold text-xs transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-luxury-gold/60"
                       >
                         Extract Another
                       </button>
@@ -1856,12 +1856,12 @@ export default function App() {
 
                 {/* Case B: Failed Card */}
                 {extractionFailed && (
-                  <div className="spotlight w-full bg-rose-950/15 border border-rose-500/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
-                    <div className="mx-auto w-10 h-10 rounded-full bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400">
+                  <div className="spotlight w-full bg-luxury-red-dark/30 border border-luxury-bronze/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
+                    <div className="mx-auto w-10 h-10 rounded-full bg-luxury-bronze/10 border border-luxury-bronze/25 flex items-center justify-center text-luxury-bronze">
                       <AlertCircle className="w-5 h-5 animate-pulse" />
                     </div>
                     <div className="space-y-0.5">
-                      <h3 className="font-display font-800 text-sm text-white">Extraction Failed</h3>
+                      <h3 className="font-display font-800 text-sm text-luxury-cream">Extraction Failed</h3>
                       <p className="text-xs text-rose-300 px-4 leading-relaxed">
                         {(() => {
                           const lower = (lastError || '').toLowerCase();
@@ -1882,7 +1882,7 @@ export default function App() {
                     <div className="flex flex-col sm:flex-row gap-2 max-w-sm mx-auto">
                       <button
                         onClick={() => handleExtract(retryPayload)}
-                        className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/60"
+                        className="flex-1 py-2.5 bg-luxury-red hover:bg-luxury-bronze text-luxury-cream rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-luxury-bronze/60"
                       >
                         Retry
                       </button>
@@ -1895,7 +1895,7 @@ export default function App() {
                           setStatusMessage('');
                           setLogs([]);
                         }}
-                        className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
+                        className="py-2.5 px-4 bg-luxury-card hover:bg-luxury-card border border-luxury-cream/10 text-luxury-cream/90 hover:text-luxury-cream rounded-xl font-semibold text-xs transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-luxury-gold/60"
                       >
                         Extract Another
                       </button>
@@ -1905,20 +1905,20 @@ export default function App() {
 
                 {/* Case E: Server Busy Card */}
                 {serverBusy && !extracting && !extractionComplete && !extractionFailed && (
-                  <div className="spotlight w-full bg-amber-950/15 border border-amber-500/20 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
-                    <div className="mx-auto w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400">
+                  <div className="spotlight w-full bg-luxury-red-dark/10 border border-luxury-gold/25 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-fade-in">
+                    <div className="mx-auto w-10 h-10 rounded-full bg-luxury-gold/10 border border-luxury-gold/25 flex items-center justify-center text-luxury-gold">
                       <Loader2 className="w-5 h-5 animate-spin" />
                     </div>
                     <div className="space-y-0.5">
-                      <h3 className="font-display font-800 text-sm text-white">Queue Full</h3>
-                      <p className="text-xs text-amber-300/80 px-4 leading-relaxed">
+                      <h3 className="font-display font-800 text-sm text-luxury-cream">Queue Full</h3>
+                      <p className="text-xs text-luxury-cream/80 px-4 leading-relaxed">
                         Another extraction is in progress. Please wait and try again.
                       </p>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2 max-w-sm mx-auto">
                       <button
                         onClick={() => handleExtract(retryPayload)}
-                        className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+                        className="flex-1 py-2.5 bg-luxury-gold hover:bg-luxury-gold/90 text-luxury-black text-luxury-cream rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-luxury-gold/60"
                       >
                         <RefreshCw className="w-3.5 h-3.5" /> Try Again
                       </button>
@@ -1929,7 +1929,7 @@ export default function App() {
                           setProgress(0);
                           setStatusMessage('');
                         }}
-                        className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl font-semibold text-xs transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
+                        className="py-2.5 px-4 bg-luxury-card hover:bg-luxury-card border border-luxury-cream/10 text-luxury-cream/90 hover:text-luxury-cream rounded-xl font-semibold text-xs transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-luxury-gold/60"
                       >
                         Dismiss
                       </button>
@@ -1939,21 +1939,21 @@ export default function App() {
 
                 {/* Case C: Active Extraction (Progress Card) */}
                 {extracting && !extractionComplete && !extractionFailed && (
-                  <div className="spotlight w-full bg-slate-900/40 border border-slate-800/85 rounded-2xl p-4 space-y-4 shadow-xl animate-fade-in">
+                  <div className="spotlight w-full bg-luxury-black/40 border border-luxury-cream/10/85 rounded-2xl p-4 space-y-4 shadow-xl animate-fade-in">
                     {/* Current Status */}
                     <div className="flex justify-between items-center text-xs">
                       <div className="flex items-center gap-2">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                        <span className="text-slate-400 font-medium">Status:</span>
-                        <span className="text-white font-semibold">{statusMessage || 'Processing clip...'}</span>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-luxury-gold" />
+                        <span className="text-luxury-cream/70 font-medium">Status:</span>
+                        <span className="text-luxury-cream font-semibold">{statusMessage || 'Processing clip...'}</span>
                       </div>
-                      <span className="font-mono font-bold text-indigo-400 text-sm">{progress.toFixed(1)}%</span>
+                      <span className="font-mono font-bold text-luxury-gold text-sm">{progress.toFixed(1)}%</span>
                     </div>
 
                     {/* Progress Bar */}
-                    <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden relative border border-slate-900" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Extraction progress">
+                    <div className="w-full h-2 bg-luxury-black rounded-full overflow-hidden relative border border-luxury-chocolate/30" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Extraction progress">
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 relative"
+                        className="h-full rounded-full bg-gradient-to-r from-luxury-gold/100 via-luxury-gold to-fuchsia-500 relative"
                         style={{ width: `${progress}%`, transition: 'width 700ms cubic-bezier(0.25, 0.8, 0.25, 1)', willChange: 'width' }}
                       >
                         <div className="absolute inset-0 bg-white/15 animate-pulse" />
@@ -1961,10 +1961,10 @@ export default function App() {
                     </div>
 
                     {/* Active Stage & Pipeline */}
-                    <div className="pt-2 border-t border-slate-900/60 space-y-2">
+                    <div className="pt-2 border-t border-luxury-chocolate/40 space-y-2">
                       <div className="flex justify-between text-[11px]">
-                        <span className="text-slate-500 font-medium">Active Stage:</span>
-                        <span className="text-indigo-300 font-bold">
+                        <span className="text-luxury-sand font-medium">Active Stage:</span>
+                        <span className="text-luxury-gold font-bold">
                           {(() => {
                             const stages = [
                               'Preparing Job',
@@ -1990,14 +1990,14 @@ export default function App() {
                           const isPast = idx < pipelineStage;
                           const isActive = idx === pipelineStage;
                           
-                          let dotColor = 'bg-slate-800 border-slate-700';
-                          if (isPast) dotColor = 'bg-emerald-500 border-emerald-400';
-                          else if (isActive) dotColor = 'bg-indigo-500 border-indigo-400 ring-2 ring-indigo-500/30';
+                          let dotColor = 'bg-luxury-card border-luxury-cream/20';
+                          if (isPast) dotColor = 'bg-luxury-bronze border-luxury-bronze';
+                          else if (isActive) dotColor = 'bg-luxury-gold/100 border-luxury-gold/70 ring-2 ring-luxury-gold/30';
 
                           return (
                             <div key={stageLabel} className="flex-1 flex flex-col items-center relative">
                               <div className={`w-2.5 h-2.5 rounded-full border ${dotColor} transition-all duration-500 ease-out`} />
-                              <span className={`text-[8px] mt-1 font-medium transition-all duration-300 hidden sm:block ${isActive ? 'text-indigo-300 font-bold' : isPast ? 'text-slate-500' : 'text-slate-700'}`}>
+                              <span className={`text-[8px] mt-1 font-medium transition-all duration-300 hidden sm:block ${isActive ? 'text-luxury-gold font-bold' : isPast ? 'text-luxury-sand' : 'text-luxury-sand/70'}`}>
                                 {stageLabel}
                               </span>
                             </div>
@@ -2007,22 +2007,22 @@ export default function App() {
                     </div>
 
                     {/* Metadata Grid (Quality, Duration, Est. Size) */}
-                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-900/60 text-center">
-                      <div className="bg-slate-950/40 border border-slate-800/60 rounded-xl p-2">
-                        <span className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold">Quality</span>
-                        <span className="text-xs font-semibold text-slate-200 mt-0.5 block">
+                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-luxury-chocolate/40 text-center">
+                      <div className="bg-luxury-black/40 border border-luxury-cream/10/60 rounded-xl p-2">
+                        <span className="text-[9px] uppercase tracking-wider text-luxury-sand block font-bold">Quality</span>
+                        <span className="text-xs font-semibold text-luxury-cream mt-0.5 block">
                           {retryPayload?.quality || selectedQuality} ({ (retryPayload?.format || selectedFormat).toUpperCase() })
                         </span>
                       </div>
-                      <div className="bg-slate-950/40 border border-slate-800/60 rounded-xl p-2">
-                        <span className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold">Duration</span>
-                        <span className="text-xs font-semibold text-slate-200 mt-0.5 block">
+                      <div className="bg-luxury-black/40 border border-luxury-cream/10/60 rounded-xl p-2">
+                        <span className="text-[9px] uppercase tracking-wider text-luxury-sand block font-bold">Duration</span>
+                        <span className="text-xs font-semibold text-luxury-cream mt-0.5 block">
                           {secsToHMS(retryPayload ? (hmsToSecs(retryPayload.end) - hmsToSecs(retryPayload.start)) : clipLen)}
                         </span>
                       </div>
-                      <div className="bg-slate-950/40 border border-slate-800/60 rounded-xl p-2">
-                        <span className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold">Est. Size</span>
-                        <span className="text-xs font-semibold text-indigo-400 mt-0.5 block">
+                      <div className="bg-luxury-black/40 border border-luxury-cream/10/60 rounded-xl p-2">
+                        <span className="text-[9px] uppercase tracking-wider text-luxury-sand block font-bold">Est. Size</span>
+                        <span className="text-xs font-semibold text-luxury-gold mt-0.5 block">
                           {estimateOutputSize(
                             retryPayload?.quality || selectedQuality,
                             retryPayload?.format || selectedFormat,
@@ -2041,8 +2041,8 @@ export default function App() {
                     disabled={!videoId || clipLen <= 0 || selectedFormatId === 'none' || selectedFormatId === '' || isLoadingFormats}
                     className={`spotlight w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all duration-200
                       ${!videoId || clipLen <= 0 || selectedFormatId === 'none' || selectedFormatId === '' || isLoadingFormats
-                        ? 'bg-slate-900/40 text-slate-600 border border-slate-900 cursor-not-allowed'
-                        : 'bg-white hover:bg-slate-100 text-slate-950 shadow-lg hover:scale-[1.01] active:scale-[0.99]'
+                        ? 'bg-luxury-black/40 text-luxury-sand border border-luxury-chocolate/30 cursor-not-allowed'
+                        : 'bg-luxury-cream hover:bg-luxury-cream/90 text-luxury-black shadow-lg hover:scale-[1.01] active:scale-[0.99]'
                       }`}
                   >
                     <Download className="w-4 h-4" />
@@ -2054,34 +2054,34 @@ export default function App() {
                   <div className="space-y-2">
                     <button
                       onClick={() => setShowAdvancedDiagnostics(v => !v)}
-                      className="w-full flex justify-between items-center px-3 py-2 bg-slate-950/60 border border-slate-900 hover:border-slate-800 rounded-lg text-[10px] font-mono text-slate-500 hover:text-slate-300 transition-all"
+                      className="w-full flex justify-between items-center px-3 py-2 bg-luxury-black/60 border border-luxury-chocolate/30 hover:border-luxury-cream/10 rounded-lg text-[10px] font-mono text-luxury-sand hover:text-luxury-cream/90 transition-all"
                     >
                       <span className="flex items-center gap-1.5">
-                        <span className={`w-1.5 h-1.5 rounded-full ${extracting ? 'bg-indigo-500 animate-pulse' : extractionFailed ? 'bg-rose-500' : extractionComplete ? 'bg-emerald-500' : 'bg-slate-700'}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full ${extracting ? 'bg-luxury-gold/100 animate-pulse' : extractionFailed ? 'bg-luxury-bronze' : extractionComplete ? 'bg-luxury-bronze' : 'bg-luxury-sand/30'}`} />
                         {showAdvancedDiagnostics ? '▼ Hide Advanced Diagnostics' : '▶ Advanced Diagnostics'}
                       </span>
-                      <span className="text-[8px] text-slate-600 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded font-mono">{logs.length} log lines</span>
+                      <span className="text-[8px] text-luxury-sand bg-luxury-card border border-luxury-cream/10 px-1.5 py-0.5 rounded font-mono">{logs.length} log lines</span>
                     </button>
 
                     {showAdvancedDiagnostics && (
-                      <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl shadow-xl overflow-hidden flex flex-col h-[260px] animate-fade-in">
-                        <div className="bg-slate-950 px-4 py-2.5 border-b border-slate-900 flex justify-between items-center">
+                      <div className="bg-luxury-black/40 border border-luxury-cream/10/80 rounded-2xl shadow-xl overflow-hidden flex flex-col h-[260px] animate-fade-in">
+                        <div className="bg-luxury-black px-4 py-2.5 border-b border-luxury-chocolate/30 flex justify-between items-center">
                           <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                            <span className="text-[10px] font-mono font-bold text-slate-300">yt-dlp_agent@croptube:~$</span>
+                            <div className="w-1.5 h-1.5 rounded-full bg-luxury-gold/100 animate-pulse" />
+                            <span className="text-[10px] font-mono font-bold text-luxury-cream/90">yt-dlp_agent@croptube:~$</span>
                           </div>
                           
                           <div className="flex items-center gap-2 text-[10px]">
-                            <label className="flex items-center gap-1 cursor-pointer text-slate-500 hover:text-slate-300 font-mono text-[9px] select-none">
+                            <label className="flex items-center gap-1 cursor-pointer text-luxury-sand hover:text-luxury-cream/90 font-mono text-[9px] select-none">
                               <input
                                 type="checkbox"
                                 checked={autoScroll}
                                 onChange={(e) => setAutoScroll(e.target.checked)}
-                                className="accent-indigo-500 w-3 h-3 bg-slate-900 border-slate-800 rounded"
+                                className="accent-luxury-gold/100 w-3 h-3 bg-luxury-card border-luxury-cream/10 rounded"
                               />
                               Auto-Scroll
                             </label>
-                            <span className="text-slate-800">|</span>
+                            <span className="text-luxury-sand/50">|</span>
                             <button
                               onClick={() => {
                                 const rawText = logs.map(l => l.text).join('\n');
@@ -2090,15 +2090,15 @@ export default function App() {
                                   .catch(() => alert('Failed to copy logs.'));
                               }}
                               disabled={logs.length === 0}
-                              className="text-[9px] font-mono text-slate-400 hover:text-white disabled:opacity-40 transition-colors"
+                              className="text-[9px] font-mono text-luxury-cream/70 hover:text-luxury-cream disabled:opacity-40 transition-colors"
                             >
                               Copy
                             </button>
-                            <span className="text-slate-800">|</span>
+                            <span className="text-luxury-sand/50">|</span>
                             <button
                               onClick={() => setLogs([])}
                               disabled={logs.length === 0}
-                              className="text-[9px] font-mono text-rose-400/80 hover:text-rose-300 disabled:opacity-40 transition-colors"
+                              className="text-[9px] font-mono text-luxury-bronze/80 hover:text-luxury-cream disabled:opacity-40 transition-colors"
                             >
                               Clear
                             </button>
@@ -2108,18 +2108,18 @@ export default function App() {
                         {/* Logs terminal contents */}
                         <div className="flex-1 p-3.5 bg-black/60 font-mono text-[10px] overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 select-text">
                           {logs.length === 0 ? (
-                            <p className="text-slate-700 italic text-center pt-8">Terminal logs stream waiting...</p>
+                            <p className="text-luxury-sand/70 italic text-center pt-8">Terminal logs stream waiting...</p>
                           ) : (
                             logs.map((log, index) => {
-                              let colorClass = 'text-slate-400';
+                              let colorClass = 'text-luxury-cream/70';
                               if (log.type === 'error') {
-                                colorClass = 'text-rose-400 bg-rose-950/15 border-l-2 border-rose-500 pl-2 py-0.5';
+                                colorClass = 'text-luxury-bronze bg-luxury-red-dark/30 border-l-2 border-luxury-bronze pl-2 py-0.5';
                               } else if (log.type === 'success') {
-                                colorClass = 'text-emerald-400 font-semibold bg-emerald-950/15 border-l-2 border-emerald-500 pl-2 py-0.5';
+                                colorClass = 'text-luxury-bronze font-semibold bg-emerald-950/15 border-l-2 border-luxury-bronze pl-2 py-0.5';
                               } else if (log.type === 'system') {
-                                colorClass = 'text-indigo-400 font-semibold border-l-2 border-indigo-500 pl-2';
+                                colorClass = 'text-luxury-gold font-semibold border-l-2 border-luxury-gold/100 pl-2';
                               } else if (log.text.includes('%')) {
-                                colorClass = 'text-indigo-300';
+                                colorClass = 'text-luxury-gold';
                               }
 
                               return (
@@ -2142,14 +2142,14 @@ export default function App() {
         </div>
 
         {/* Recent Extractions Section */}
-        <div className="pt-8 border-t border-slate-800/80 space-y-6 z-10 relative">
+        <div className="pt-8 border-t border-luxury-cream/10/80 space-y-6 z-10 relative">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-indigo-400" />
-              <h2 className="font-display font-extrabold text-base sm:text-lg tracking-tight text-white">
+              <Clock className="w-4 h-4 text-luxury-gold" />
+              <h2 className="font-display font-extrabold text-base sm:text-lg tracking-tight text-luxury-cream">
                 Recent Extractions
               </h2>
-              <span className="text-[10px] bg-slate-900 border border-slate-800 px-2.5 py-0.5 rounded-full text-slate-400 font-mono">
+              <span className="text-[10px] bg-luxury-card border border-luxury-cream/10 px-2.5 py-0.5 rounded-full text-luxury-cream/70 font-mono">
                 {jobHistory.length} / 20
               </span>
             </div>
@@ -2165,11 +2165,11 @@ export default function App() {
                     onChange={(e) => setHistorySearchQuery(e.target.value)}
                     className="history-search-input pr-8"
                   />
-                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Search className="w-3.5 h-3.5 text-luxury-sand absolute left-3 top-1/2 -translate-y-1/2" />
                   {historySearchQuery && (
                     <button
                       onClick={() => setHistorySearchQuery('')}
-                      className="text-slate-500 hover:text-rose-400 absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 transition-colors"
+                      className="text-luxury-sand hover:text-luxury-bronze absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 transition-colors"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -2179,7 +2179,7 @@ export default function App() {
                 {/* Clear all button */}
                 <button
                   onClick={handleClearAllHistory}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40 hover:border-rose-800/50 text-rose-400 hover:text-rose-300 rounded-xl text-xs font-semibold transition-all"
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-luxury-red-dark/20 hover:bg-luxury-red-dark/40 border border-luxury-red/35 hover:border-luxury-red/50 text-luxury-bronze hover:text-luxury-cream rounded-xl text-xs font-semibold transition-all"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Clear All History
@@ -2195,12 +2195,12 @@ export default function App() {
             if (jobHistory.length === 0) {
               return (
                 <div className="history-empty-state">
-                  <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 shadow-md">
+                  <div className="w-12 h-12 rounded-full bg-luxury-card border border-luxury-cream/10 flex items-center justify-center text-luxury-sand shadow-md">
                     <Clock className="w-6 h-6 animate-pulse" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-slate-300">No extractions recorded yet</p>
-                    <p className="text-xs text-slate-500 max-w-sm mt-1 mx-auto leading-relaxed">
+                    <p className="text-sm font-bold text-luxury-cream/90">No extractions recorded yet</p>
+                    <p className="text-xs text-luxury-sand max-w-sm mt-1 mx-auto leading-relaxed">
                       Your successful slices will appear here automatically, allowing you to reload settings with a single click.
                     </p>
                   </div>
@@ -2211,12 +2211,12 @@ export default function App() {
             if (filtered.length === 0) {
               return (
                 <div className="history-empty-state">
-                  <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 shadow-md">
+                  <div className="w-12 h-12 rounded-full bg-luxury-card border border-luxury-cream/10 flex items-center justify-center text-luxury-sand shadow-md">
                     <Search className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-slate-300">No matching extractions found</p>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-sm font-bold text-luxury-cream/90">No matching extractions found</p>
+                    <p className="text-xs text-luxury-sand mt-1">
                       Try searching with different keywords.
                     </p>
                   </div>
@@ -2244,11 +2244,11 @@ export default function App() {
 
                       {/* Title & Stats */}
                       <div className="space-y-1">
-                        <h4 className="text-xs font-bold text-slate-200 line-clamp-2 leading-snug group-hover:text-indigo-400 transition-colors" title={item.title}>
+                        <h4 className="text-xs font-bold text-luxury-cream line-clamp-2 leading-snug group-hover:text-luxury-gold transition-colors" title={item.title}>
                           {item.title}
                         </h4>
-                        <div className="flex justify-between items-center text-[9px] font-mono text-slate-500 pt-0.5">
-                          <span className="bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800/80">{item.quality} • {item.format.toUpperCase()}</span>
+                        <div className="flex justify-between items-center text-[9px] font-mono text-luxury-sand pt-0.5">
+                          <span className="bg-luxury-card px-1.5 py-0.5 rounded border border-luxury-cream/10/80">{item.quality} • {item.format.toUpperCase()}</span>
                           <span>
                             {new Date(item.timestamp).toLocaleString(undefined, {
                               month: 'short',
@@ -2263,17 +2263,17 @@ export default function App() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-1.5 pt-2 border-t border-slate-900 mt-auto">
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-luxury-chocolate/30 mt-auto">
                       <button
                         onClick={() => handleReloadSettings(item)}
-                        className="btn-shimmer flex-1 py-2 bg-indigo-950/45 hover:bg-indigo-900/60 border border-indigo-900/50 hover:border-indigo-700/50 text-indigo-300 hover:text-indigo-100 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1"
+                        className="btn-shimmer flex-1 py-2 bg-luxury-black/45 hover:bg-luxury-gold/60 border border-luxury-gold/50 hover:border-luxury-gold/50 text-luxury-gold hover:text-luxury-black rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1"
                       >
                         <RefreshCw className="w-3 h-3" />
                         Reload Settings
                       </button>
                       <button
                         onClick={() => handleRemoveHistoryItem(item.id)}
-                        className="p-2 bg-slate-950 hover:bg-rose-950/20 border border-slate-800 hover:border-rose-900/40 text-slate-500 hover:text-rose-400 rounded-xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/60"
+                        className="p-2 bg-luxury-black hover:bg-luxury-red-dark/20 border border-luxury-cream/10 hover:border-luxury-red/35 text-luxury-sand hover:text-luxury-bronze rounded-xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-luxury-bronze/60"
                         aria-label={`Remove ${item.title} from history`}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -2288,15 +2288,15 @@ export default function App() {
         </div>
 
         {/* Full-width Footer */}
-        <div className="w-full flex flex-col sm:flex-row justify-between items-center gap-3 text-[10px] text-white/30 border-t border-slate-900 pt-6 z-10 relative">
+        <div className="w-full flex flex-col sm:flex-row justify-between items-center gap-3 text-[10px] text-luxury-cream/30 border-t border-luxury-chocolate/30 pt-6 z-10 relative">
           <span>&copy; {new Date().getFullYear()} CropTube. All rights reserved.</span>
           <div className="flex flex-wrap justify-center gap-3 sm:gap-4 mt-2 sm:mt-0">
-            <button onClick={() => setActiveModal('about')} className="hover:text-white transition-colors">About</button>
-            <button onClick={() => setActiveModal('works')} className="hover:text-white transition-colors">Works</button>
-            <button onClick={() => setActiveModal('services')} className="hover:text-white transition-colors">Services</button>
-            <button onClick={() => setActiveModal('docs')} className="hover:text-white transition-colors">Docs &amp; Guide</button>
-            <button onClick={() => setActiveModal('privacy')} className="hover:text-white transition-colors">Privacy Policy</button>
-            <button onClick={() => setActiveModal('terms')} className="hover:text-white transition-colors">Terms of Service</button>
+            <button onClick={() => setActiveModal('about')} className="hover:text-luxury-cream transition-colors">About</button>
+            <button onClick={() => setActiveModal('works')} className="hover:text-luxury-cream transition-colors">Works</button>
+            <button onClick={() => setActiveModal('services')} className="hover:text-luxury-cream transition-colors">Services</button>
+            <button onClick={() => setActiveModal('docs')} className="hover:text-luxury-cream transition-colors">Docs &amp; Guide</button>
+            <button onClick={() => setActiveModal('privacy')} className="hover:text-luxury-cream transition-colors">Privacy Policy</button>
+            <button onClick={() => setActiveModal('terms')} className="hover:text-luxury-cream transition-colors">Terms of Service</button>
           </div>
         </div>
 

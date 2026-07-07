@@ -168,20 +168,20 @@ export default function CustomDropdown({
         onClick={toggleOpen}
         className={[
           'custom-dropdown-trigger w-full flex items-center justify-between',
-          'bg-slate-900/40 border rounded-xl outline-none',
-          'text-xs text-slate-300 py-3 px-3 cursor-pointer select-none',
+          'bg-luxury-black/40 border rounded-xl outline-none',
+          'text-xs text-luxury-cream/90 py-3 px-3 cursor-pointer select-none',
           'transition-all duration-200',
           open
-            ? 'border-indigo-500 ring-1 ring-indigo-500/30'
-            : 'border-slate-800 hover:border-slate-700',
+            ? 'border-luxury-gold/100 ring-1 ring-luxury-gold/30'
+            : 'border-luxury-cream/10 hover:border-luxury-chocolate',
           disabled ? 'opacity-50 cursor-not-allowed' : '',
-          'focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:border-indigo-500',
+          'focus-visible:ring-2 focus-visible:ring-luxury-gold/60 focus-visible:border-luxury-gold/100',
         ].filter(Boolean).join(' ')}
       >
         <span className="truncate">{selectedLabel}</span>
         <ChevronDown
           className={[
-            'w-3.5 h-3.5 text-slate-500 flex-shrink-0 ml-2',
+            'w-3.5 h-3.5 text-luxury-cream/50 flex-shrink-0 ml-2',
             'transition-transform duration-200',
             open ? 'rotate-180' : '',
           ].join(' ')}
@@ -196,7 +196,7 @@ export default function CustomDropdown({
           role="listbox"
           aria-label={ariaLabel}
           className="custom-dropdown-menu absolute left-0 right-0 z-[200] mt-1.5
-            bg-slate-950 border border-slate-800 rounded-xl shadow-2xl
+            bg-luxury-black border border-luxury-cream/10 rounded-xl shadow-2xl
             max-h-52 overflow-y-auto
             py-1
             animate-dropdown-in"
@@ -207,7 +207,7 @@ export default function CustomDropdown({
                 <React.Fragment key={`group-${groupIdx}`}>
                   <li
                     role="presentation"
-                    className="px-3 pt-2.5 pb-1 text-[9px] font-bold uppercase tracking-widest text-slate-600 select-none"
+                    className="px-3 pt-2.5 pb-1 text-[9px] font-bold uppercase tracking-widest text-luxury-sand select-none"
                   >
                     {opt.group}
                   </li>
@@ -229,15 +229,15 @@ export default function CustomDropdown({
                           'flex items-center justify-between px-3 py-2 mx-1 rounded-lg text-xs cursor-pointer select-none',
                           'transition-colors duration-100',
                           isSelected
-                            ? 'bg-indigo-600/20 text-indigo-300'
+                            ? 'bg-luxury-gold/20 text-luxury-gold/50'
                             : isFocused
-                              ? 'bg-slate-800/80 text-slate-100'
-                              : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200',
+                              ? 'bg-luxury-card/80 text-luxury-cream'
+                              : 'text-luxury-cream/70 hover:bg-luxury-black/80 hover:text-luxury-cream',
                         ].join(' ')}
                       >
                         <span>{item.label}</span>
                         {isSelected && (
-                          <Check className="w-3 h-3 text-indigo-400 flex-shrink-0" />
+                          <Check className="w-3 h-3 text-luxury-gold flex-shrink-0" />
                         )}
                       </li>
                     );
@@ -263,15 +263,15 @@ export default function CustomDropdown({
                     'flex items-center justify-between px-3 py-2 mx-1 rounded-lg text-xs cursor-pointer select-none',
                     'transition-colors duration-100',
                     isSelected
-                      ? 'bg-indigo-600/20 text-indigo-300'
+                      ? 'bg-luxury-gold/20 text-luxury-gold/50'
                       : isFocused
-                        ? 'bg-slate-800/80 text-slate-100'
-                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200',
+                        ? 'bg-luxury-card/80 text-luxury-cream'
+                        : 'text-luxury-cream/70 hover:bg-luxury-black/80 hover:text-luxury-cream',
                   ].join(' ')}
                 >
                   <span>{opt.label}</span>
                   {isSelected && (
-                    <Check className="w-3 h-3 text-indigo-400 flex-shrink-0" />
+                    <Check className="w-3 h-3 text-luxury-gold flex-shrink-0" />
                   )}
                 </li>
               );

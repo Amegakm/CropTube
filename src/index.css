@@ -9,7 +9,7 @@
 
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white;
+    @apply bg-luxury-black text-luxury-cream selection:bg-luxury-gold selection:text-luxury-black;
     font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   }
 }
@@ -31,7 +31,7 @@
    Select option styling
    ─────────────────────────────────────────────────────────── */
 select option {
-  background-color: #0b1329 !important;
+  background-color: #1A1613 !important;
   color: #f1f5f9 !important;
 }
 
@@ -39,38 +39,38 @@ select option {
    Custom Scrollbar
    ─────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { @apply bg-slate-950; }
-::-webkit-scrollbar-thumb { @apply bg-slate-800 rounded-full; }
-::-webkit-scrollbar-thumb:hover { @apply bg-slate-700; }
+::-webkit-scrollbar-track { @apply bg-luxury-black; }
+::-webkit-scrollbar-thumb { @apply bg-luxury-chocolate/50 rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-luxury-gold/50; }
 
 /* ──────────────────────────────────────────────────────────
    Neon Glows
    ─────────────────────────────────────────────────────────── */
 .neon-glow-indigo {
-  box-shadow: 0 0 20px rgba(99,102,241,0.15), 0 0 40px rgba(99,102,241,0.05);
+  box-shadow: 0 0 20px rgba(229,169,60,0.15), 0 0 40px rgba(229,169,60,0.05);
 }
 .neon-glow-violet {
-  box-shadow: 0 0 20px rgba(139,92,246,0.2), 0 0 40px rgba(139,92,246,0.05);
+  box-shadow: 0 0 20px rgba(184,108,51,0.2), 0 0 40px rgba(184,108,51,0.05);
 }
 .neon-border-glow { animation: borderGlow 4s infinite alternate; }
 @keyframes borderGlow {
-  0%   { border-color: rgba(99,102,241,0.3); box-shadow: 0 0 10px rgba(99,102,241,0.1); }
-  100% { border-color: rgba(139,92,246,0.6); box-shadow: 0 0 20px rgba(139,92,246,0.2); }
+  0%   { border-color: rgba(229,169,60,0.3); box-shadow: 0 0 10px rgba(229,169,60,0.1); }
+  100% { border-color: rgba(184,108,51,0.6); box-shadow: 0 0 20px rgba(184,108,51,0.2); }
 }
 
 /* ──────────────────────────────────────────────────────────
    Radial Glow
    ─────────────────────────────────────────────────────────── */
 .radial-glow {
-  background: radial-gradient(circle at 50% 0%, rgba(99,102,241,0.08) 0%, rgba(0,0,0,0) 70%);
+  background: radial-gradient(circle at 50% 0%, rgba(229,169,60,0.08) 0%, rgba(0,0,0,0) 70%);
 }
 
 /* ──────────────────────────────────────────────────────────
    Grab-time Flash
    ─────────────────────────────────────────────────────────── */
 @keyframes grabFlash {
-  0%   { border-color: rgb(16,185,129);  box-shadow: 0 0 0 3px rgba(16,185,129,0.4); }
-  60%  { border-color: rgb(16,185,129);  box-shadow: 0 0 0 7px rgba(16,185,129,0.1); }
+  0%   { border-color: rgb(184,108,51);  box-shadow: 0 0 0 3px rgba(184,108,51,0.4); }
+  60%  { border-color: rgb(184,108,51);  box-shadow: 0 0 0 7px rgba(184,108,51,0.1); }
   100% { border-color: rgba(51,65,85,1); box-shadow: none; }
 }
 .grab-flash { animation: grabFlash 1s ease-out forwards; }
@@ -79,8 +79,8 @@ select option {
    Seek Pulse
    ─────────────────────────────────────────────────────────── */
 @keyframes seekPulse {
-  0%   { box-shadow: 0 0 0 0   rgba(99,102,241,0.55); }
-  70%  { box-shadow: 0 0 0 9px rgba(99,102,241,0);    }
+  0%   { box-shadow: 0 0 0 0   rgba(229,169,60,0.55); }
+  70%  { box-shadow: 0 0 0 9px rgba(9,132,227,0);    }
   100% { box-shadow: none; }
 }
 .seek-pulse { animation: seekPulse 0.55s ease-out; }
@@ -102,7 +102,7 @@ select option {
    Glass Panel
    ─────────────────────────────────────────────────────────── */
 .glass-panel {
-  background: rgba(11, 17, 34, 0.45) !important;
+  background: rgba(26, 22, 19, 0.45) !important;
   backdrop-filter: blur(24px) saturate(160%);
   -webkit-backdrop-filter: blur(24px) saturate(160%);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -115,11 +115,11 @@ select option {
    Navbar Glass
    ─────────────────────────────────────────────────────────── */
 .nav-glass {
-  background: rgba(3, 6, 18, 0.88);
+  background: rgba(13, 13, 13, 0.92);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border-bottom: 1px solid rgba(255,255,255,0.09);
-  box-shadow: 0 1px 0 rgba(99,102,241,0.06);
+  box-shadow: 0 1px 0 rgba(229,169,60,0.06);
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ select option {
   left: 0;
   width: 0;
   height: 1.5px;
-  background: linear-gradient(90deg, #818cf8, #a78bfa);
+  background: linear-gradient(90deg, #E5A93C, #B86C33);
   border-radius: 9999px;
   transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -152,13 +152,13 @@ select option {
    Animated Dynamic Mesh Background
    ─────────────────────────────────────────────────────────── */
 .dynamic-mesh-bg {
-  background-color: #02040a;
+  background-color: #161311;
   background-image:
-    radial-gradient(circle at 20% 30%, rgba(37, 99, 235, 0.20) 0%, transparent 45%),
-    radial-gradient(circle at 80% 70%, rgba(79, 70, 229, 0.18) 0%, transparent 50%),
-    radial-gradient(circle at 50% 20%, rgba(29, 78, 216, 0.16) 0%, transparent 40%),
-    radial-gradient(circle at 10% 80%, rgba(109, 40, 217, 0.14) 0%, transparent 45%),
-    radial-gradient(circle at 90% 10%, rgba(59, 130, 246, 0.12) 0%, transparent 35%);
+    radial-gradient(circle at 20% 30%, rgba(229, 169, 60, 0.08) 0%, transparent 45%),
+    radial-gradient(circle at 80% 70%, rgba(184, 108, 51, 0.06) 0%, transparent 50%),
+    radial-gradient(circle at 50% 20%, rgba(71, 44, 25, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 10% 80%, rgba(184, 108, 51, 0.05) 0%, transparent 45%),
+    radial-gradient(circle at 90% 10%, rgba(229, 169, 60, 0.06) 0%, transparent 35%);
   background-size: 200% 200%;
   animation: meshDrift 20s ease infinite alternate;
 }
@@ -173,7 +173,7 @@ select option {
    Bento Card
    ─────────────────────────────────────────────────────────── */
 .bento-card {
-  background: rgba(11, 17, 34, 0.55);
+  background: rgba(26, 22, 19, 0.55);
   border: 1px solid rgba(255,255,255,0.06);
   border-radius: 20px;
   padding: 1.5rem;
@@ -191,7 +191,7 @@ select option {
   inset: 0;
   background: radial-gradient(
     200px circle at var(--sx, -9999px) var(--sy, -9999px),
-    rgba(99,102,241,0.09) 0%,
+    rgba(229,169,60,0.08) 0%,
     transparent 80%
   );
   opacity: 0;
@@ -201,8 +201,8 @@ select option {
 }
 .bento-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 20px 40px -12px rgba(99,102,241,0.25), 0 0 0 1px rgba(99,102,241,0.15);
-  border-color: rgba(99,102,241,0.25);
+  box-shadow: 0 20px 40px -12px rgba(229,169,60,0.25), 0 0 0 1px rgba(229,169,60,0.15);
+  border-color: rgba(229,169,60,0.25);
 }
 .bento-card:hover::before {
   opacity: 1;
@@ -218,12 +218,12 @@ select option {
 .faq-item {
   border: 1px solid rgba(255,255,255,0.06);
   border-radius: 16px;
-  background: rgba(11, 17, 34, 0.4);
+  background: rgba(26, 22, 19, 0.4);
   overflow: hidden;
   transition: border-color 0.2s ease;
 }
 .faq-item.open {
-  border-color: rgba(99,102,241,0.2);
+  border-color: rgba(229,169,60,0.2);
 }
 .faq-answer {
   max-height: 0;
@@ -242,7 +242,7 @@ select option {
   align-items: center;
   gap: 10px;
   padding: 0.85rem 1.25rem;
-  background: rgba(11,17,34,0.65);
+  background: rgba(26,22,19,0.65);
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 18px;
   backdrop-filter: blur(14px);
@@ -251,8 +251,8 @@ select option {
   box-shadow: 0 2px 12px -4px rgba(0,0,0,0.35);
 }
 .hero-input-wrap:focus-within {
-  border-color: rgba(99,102,241,0.5);
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.1), 0 2px 12px -4px rgba(0,0,0,0.35);
+  border-color: rgba(229,169,60,0.5);
+  box-shadow: 0 0 0 3px rgba(229,169,60,0.1), 0 2px 12px -4px rgba(0,0,0,0.35);
 }
 /* Suppress ALL inner focus indicators on the actual input element inside the hero wrap.
    Focus state is owned exclusively by .hero-input-wrap:focus-within above. */
@@ -267,7 +267,7 @@ select option {
    CTA Gradient Button
    ─────────────────────────────────────────────────────────── */
 .cta-btn {
-  background: linear-gradient(135deg, #5b5ef4 0%, #7c3aed 55%, #a855f7 100%);
+  background: linear-gradient(135deg, #E5A93C 0%, #E5A93C 35%, #B86C33 100%);
   border: none;
   border-radius: 14px;
   color: #fff;
@@ -281,8 +281,8 @@ select option {
               box-shadow 0.22s ease,
               filter 0.22s ease;
   box-shadow:
-    0 8px 28px -6px rgba(99,102,241,0.6),
-    0 2px 8px -2px rgba(124,58,237,0.3),
+    0 8px 28px -6px rgba(229,169,60,0.4),
+    0 2px 8px -2px rgba(184,108,51,0.2),
     inset 0 1px 0 rgba(255,255,255,0.15);
   position: relative;
   overflow: hidden;
@@ -304,14 +304,14 @@ select option {
 .cta-btn:hover {
   transform: translateY(-3px) scale(1.018);
   box-shadow:
-    0 18px 40px -8px rgba(99,102,241,0.75),
-    0 4px 12px -3px rgba(124,58,237,0.45),
+    0 18px 40px -8px rgba(229,169,60,0.55),
+    0 4px 12px -3px rgba(184,108,51,0.35),
     inset 0 1px 0 rgba(255,255,255,0.2);
   filter: brightness(1.1);
 }
 .cta-btn:active {
   transform: translateY(0) scale(0.985);
-  box-shadow: 0 4px 14px -4px rgba(99,102,241,0.5);
+  box-shadow: 0 4px 14px -4px rgba(229,169,60,0.5);
   transition-duration: 0.08s;
 }
 .cta-btn:disabled {
@@ -342,8 +342,8 @@ select option {
   white-space: nowrap;
 }
 .qs-chip:hover {
-  background: rgba(99,102,241,0.14);
-  border-color: rgba(99,102,241,0.35);
+  background: rgba(229,169,60,0.12);
+  border-color: rgba(229,169,60,0.35);
   color: #e2e8f0;
   transform: translateY(-1px);
 }
@@ -354,7 +354,7 @@ select option {
 .timeline-line {
   flex: 1;
   height: 1px;
-  background: linear-gradient(90deg, rgba(99,102,241,0.3), rgba(139,92,246,0.3));
+  background: linear-gradient(90deg, rgba(229,169,60,0.3), rgba(184,108,51,0.2));
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -391,7 +391,7 @@ select option {
 .section-title {
   font-family: 'Outfit', sans-serif;
   font-weight: 800;
-  background: linear-gradient(135deg, #f1f5f9 30%, #818cf8 100%);
+  background: linear-gradient(135deg, #FAF9F6 30%, #E5A93C 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -399,10 +399,10 @@ select option {
 
 /* Fiery glow */
 .fiery-glow {
-  background: radial-gradient(circle at 10% 90%, rgba(239, 68, 68, 0.22) 0%, transparent 45%),
-              radial-gradient(circle at 90% 10%, rgba(99, 102, 241, 0.18) 0%, transparent 55%),
-              radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 60%),
-              #030712;
+  background: radial-gradient(circle at 10% 90%, rgba(229, 169, 60, 0.15) 0%, transparent 45%),
+              radial-gradient(circle at 90% 10%, rgba(184, 108, 51, 0.12) 0%, transparent 55%),
+              radial-gradient(circle at 50% 50%, rgba(71, 44, 25, 0.08) 0%, transparent 60%),
+              #0D0D0D;
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -431,10 +431,10 @@ select option {
 
 /* Premium modal glass surface */
 .modal-content-box {
-  background: rgba(8, 12, 26, 0.88);
+  background: rgba(13, 13, 13, 0.95);
   backdrop-filter: blur(32px) saturate(180%);
   -webkit-backdrop-filter: blur(32px) saturate(180%);
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(71, 44, 25, 0.3);
   box-shadow:
     0 40px 80px -20px rgba(0,0,0,0.75),
     inset 0 1px 0 rgba(255,255,255,0.05);
@@ -450,8 +450,8 @@ select option {
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 .modal-service-card:hover {
-  background: rgba(99,102,241,0.07);
-  border-color: rgba(99,102,241,0.2);
+  background: rgba(229,169,60,0.07);
+  border-color: rgba(229,169,60,0.2);
 }
 
 /* Docs section label */
@@ -461,7 +461,7 @@ select option {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: rgba(99,102,241,0.9);
+  color: rgba(229, 169, 60, 0.9);
   margin-bottom: 3px;
 }
 
@@ -481,7 +481,7 @@ select option {
    Job History & Recovery Styles — Phase 6.5
    ─────────────────────────────────────────────────────────── */
 .history-card {
-  background: rgba(11, 17, 34, 0.45);
+  background: rgba(26, 22, 19, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 16px;
   padding: 0.85rem;
@@ -501,9 +501,9 @@ select option {
 
 .history-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(99, 102, 241, 0.25);
-  box-shadow: 0 12px 24px -10px rgba(99, 102, 241, 0.2),
-              0 0 0 1px rgba(99, 102, 241, 0.1);
+  border-color: rgba(229, 169, 60, 0.25);
+  box-shadow: 0 12px 24px -10px rgba(229, 169, 60, 0.2),
+              0 0 0 1px rgba(229, 169, 60, 0.1);
 }
 
 .history-thumbnail-container {
@@ -511,7 +511,7 @@ select option {
   aspect-ratio: 16 / 9;
   border-radius: 10px;
   overflow: hidden;
-  background-color: #02040a;
+  background-color: #161311;
   border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
@@ -542,7 +542,7 @@ select option {
 }
 
 .history-search-input {
-  background: rgba(11, 17, 34, 0.55);
+  background: rgba(26, 22, 19, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 12px;
   color: #f1f5f9;
@@ -558,8 +558,8 @@ select option {
 }
 
 .history-search-input:focus {
-  border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.09);
+  border-color: rgba(229, 169, 60, 0.5);
+  box-shadow: 0 0 0 3px rgba(229, 169, 60, 0.09);
 }
 
 .history-empty-state {
@@ -571,7 +571,7 @@ select option {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(11, 17, 34, 0.2);
+  background: rgba(26, 22, 19, 0.2);
   gap: 0.75rem;
 }
 
@@ -635,8 +635,8 @@ select option {
   border-radius: inherit;
   background: radial-gradient(
     180px circle at var(--sx, -9999px) var(--sy, -9999px),
-    rgba(99,102,241,0.10) 0%,
-    rgba(99,102,241,0.04) 50%,
+    rgba(229,169,60,0.10) 0%,
+    rgba(229,169,60,0.04) 50%,
     transparent 75%
   );
   opacity: 0;
@@ -687,8 +687,8 @@ select option {
   border-radius: inherit;
   background: radial-gradient(
     180px circle at var(--sx, -9999px) var(--sy, -9999px),
-    rgba(99,102,241,0.10) 0%,
-    rgba(99,102,241,0.04) 50%,
+    rgba(229,169,60,0.10) 0%,
+    rgba(229,169,60,0.04) 50%,
     transparent 75%
   );
   opacity: 0;
@@ -728,19 +728,19 @@ select option {
 
 /* Menu container */
 .custom-dropdown-menu {
-  background: rgba(8, 12, 26, 0.98);
+  background: rgba(13, 13, 13, 0.98);
   backdrop-filter: blur(20px) saturate(140%);
   -webkit-backdrop-filter: blur(20px) saturate(140%);
   box-shadow:
     0 20px 40px -8px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(99, 102, 241, 0.08),
+    0 0 0 1px rgba(229, 169, 60, 0.15),
     inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
 /* Scrollbar inside the menu */
 .custom-dropdown-menu::-webkit-scrollbar { width: 4px; }
 .custom-dropdown-menu::-webkit-scrollbar-track { background: transparent; }
-.custom-dropdown-menu::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.3); border-radius: 9999px; }
+.custom-dropdown-menu::-webkit-scrollbar-thumb { background: rgba(229,169,60,0.3); border-radius: 9999px; }
 
 /* Trigger button — no browser chrome */
 .custom-dropdown-trigger {
@@ -767,8 +767,8 @@ select option {
   border-radius: inherit;
   background: radial-gradient(
     180px circle at var(--sx, -9999px) var(--sy, -9999px),
-    rgba(99,102,241,0.10) 0%,
-    rgba(99,102,241,0.04) 50%,
+    rgba(229,169,60,0.10) 0%,
+    rgba(229,169,60,0.04) 50%,
     transparent 75%
   );
   opacity: 0;
@@ -842,7 +842,7 @@ select option {
    Suppressed on hero input (handled by .hero-input-wrap:focus-within)
    ─────────────────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid rgba(99,102,241,0.7);
+  outline: 2px solid rgba(9,132,227,0.7);
   outline-offset: 2px;
 }
 
