@@ -669,6 +669,7 @@ export default function App() {
   const [rawFormats, setRawFormats] = useState([]);
   const [isLoadingFormats, setIsLoadingFormats] = useState(false);
   const [cookies, setCookies] = useState(() => localStorage.getItem('croptube_cookies') || '');
+  const [isExplicitCookie, setIsExplicitCookie] = useState(false);
   const [showCookies, setShowCookies] = useState(false);
   const [hasGlobalCookies, setHasGlobalCookies] = useState(false);
   const [cookiesExpired, setCookiesExpired] = useState(false);
@@ -975,6 +976,9 @@ export default function App() {
         return data;
       })
       .then(data => {
+        if (data.hasGlobalCookies !== undefined) {
+          setHasGlobalCookies(data.hasGlobalCookies);
+        }
         if (data.title) setVideoTitle(data.title);
         else setVideoTitle('YouTube Video');
 
@@ -1061,6 +1065,7 @@ export default function App() {
       .then(() => {
         setHasGlobalCookies(true);
         setCookiesExpired(false);
+        setIsExplicitCookie(false);
         alert('✅ Cookies registered on cloud server! Works from all devices now.');
       })
       .catch((err) => alert(err.message));
@@ -1110,7 +1115,10 @@ export default function App() {
       format: selectedFormat,
       quality: selectedQuality,
       format_id: selectedFormatId,
-      cookies: cookies
+      // Only send local cookies if the server has no global cookies registered,
+      // or if the user has explicitly pasted/changed them in this session.
+      cookies: (hasGlobalCookies && !isExplicitCookie) ? '' : cookies,
+      isExplicit: isExplicitCookie
     };
 
     const s = hmsToSecs(targetPayload.start);
@@ -1589,7 +1597,7 @@ export default function App() {
                     </div>
                     <textarea
                       value={cookies}
-                      onChange={e => setCookies(e.target.value)}
+                      onChange={e => { setCookies(e.target.value); setIsExplicitCookie(true); }}
                       placeholder={'# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t...\tSID\t...'}
                       rows={4}
                       disabled={extracting}

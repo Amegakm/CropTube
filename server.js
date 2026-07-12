@@ -341,54 +341,88 @@ function ytdlpEnv() {
   return { ...process.env, PYTHONUNBUFFERED: '1', HOME: tempDir, XDG_CACHE_HOME: cacheDir };
 }
 
-function resolveCookieSource(jobCookiesText = null, fileId = null) {
-  const cookiesFromBrowser = process.env.YT_DLP_COOKIES_FROM_BROWSER;
-  
-  // 1. If we have browser cookies configured, we use that
-  if (cookiesFromBrowser) {
-    return { source: 'browser', path: cookiesFromBrowser, hasCookies: true, isTemporary: false };
+function hasUsableGlobalCookies() {
+  try {
+    return fs.existsSync(globalCookiePath) && fs.statSync(globalCookiePath).size > 0;
+  } catch (_) {
+    return false;
   }
+}
 
-  // 2. If the job explicitly provided new cookies, write to temp file
-  if (jobCookiesText && jobCookiesText.trim() && fileId) {
+function resolveCookieSource(jobCookiesText = null, fileId = null, isExplicit = false) {
+  // 1. If isExplicit === true and jobCookiesText contains valid non-empty Netscape cookie data, create cookies_<fileId>.txt and return temporary-user
+  if (isExplicit && jobCookiesText && jobCookiesText.trim() && fileId && isValidNetscapeCookie(jobCookiesText)) {
     const tempPath = path.join(tempDir, `cookies_${fileId}.txt`);
     try {
       fs.writeFileSync(tempPath, jobCookiesText.trim(), 'utf8');
-      return { source: 'temporary', path: tempPath, hasCookies: true, isTemporary: true };
+      return { path: tempPath, source: 'temporary-user', isTemporary: true };
     } catch (err) {
       console.error('[Cookies] Failed to write temporary cookie file:', err);
     }
   }
 
-  // 3. Fall back to the server-side global_cookies.txt
-  const globalExists = fs.existsSync(globalCookiePath);
-  let globalSize = 0;
-  if (globalExists) {
-    try {
-      globalSize = fs.statSync(globalCookiePath).size;
-    } catch (_) {}
+  // 2. Otherwise, if global_cookies.txt exists and is non-empty, return the exact global path
+  if (hasUsableGlobalCookies()) {
+    return { path: globalCookiePath, source: 'global', isTemporary: false };
   }
 
-  if (globalExists && globalSize > 0) {
-    return { source: 'global', path: globalCookiePath, hasCookies: true, isTemporary: false };
-  }
-
-  return { source: 'none', path: null, hasCookies: false, isTemporary: false };
+  return { path: null, source: 'none', isTemporary: false };
 }
 
-function getCommonArgsConfig(quality = '', customCookiePath = null, customSource = null) {
-  let cookieConf;
-  if (customCookiePath || customSource) {
-    cookieConf = {
-      path: customCookiePath,
-      source: customSource || (customCookiePath === globalCookiePath ? 'global' : 'temporary'),
-      hasCookies: !!customCookiePath
-    };
-  } else {
+function canDeleteTemporaryJobCookie(cookiePath, source, isTemporary, fileId) {
+  if (source !== 'temporary-user' || isTemporary !== true || !cookiePath) {
+    return false;
+  }
+
+  const resolvedPath = path.resolve(cookiePath);
+  const resolvedTempDir = path.resolve(tempDir);
+  const resolvedGlobalCookiePath = path.resolve(globalCookiePath);
+  const expectedPath = path.resolve(path.join(tempDir, `cookies_${fileId}.txt`));
+
+  if (resolvedPath === resolvedGlobalCookiePath) {
+    return false;
+  }
+
+  return resolvedPath === expectedPath && resolvedPath.startsWith(resolvedTempDir);
+}
+
+function cleanupSelectedCookieFile(fileId, cookiePath, source, isTemporary) {
+  const shouldDelete = canDeleteTemporaryJobCookie(cookiePath, source, isTemporary, fileId);
+  const action = shouldDelete ? 'deleted' : 'preserved';
+
+  try {
+    if (shouldDelete && fs.existsSync(cookiePath)) {
+      fs.unlinkSync(cookiePath);
+    }
+    console.log(`[Cookie Cleanup] source=${source || 'none'}, temporary=${isTemporary === true}, action=${action}`);
+  } catch (unlinkErr) {
+    console.error('[Cleanup] Failed to delete temporary cookie file:', unlinkErr);
+  }
+}
+
+function cleanupSelectedCookieFileAfterChildExit(fileId, cookiePath, source, isTemporary, child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
+    cleanupSelectedCookieFile(fileId, cookiePath, source, isTemporary);
+    return;
+  }
+
+  let cleaned = false;
+  const runCleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    cleanupSelectedCookieFile(fileId, cookiePath, source, isTemporary);
+  };
+
+  child.once('close', runCleanup);
+  setTimeout(runCleanup, 3000);
+}
+
+function getCommonArgsConfig(quality = '', cookieConf = null) {
+  if (!cookieConf) {
     cookieConf = resolveCookieSource();
   }
 
-  const hasValidCookies = cookieConf.hasCookies;
+  const hasValidCookies = !!cookieConf.path && cookieConf.source !== 'none';
   // Use tv_embedded first (avoids JS n-challenge requirement), then fall back to web_embedded and web.
   // tv_embedded provides the best compatibility when cookies are present without needing a JS runtime.
   const playerClient = hasValidCookies ? 'tv_embedded,web_embedded,web' : 'android_vr,web,android';
@@ -400,10 +434,7 @@ function getCommonArgsConfig(quality = '', customCookiePath = null, customSource
     '--cache-dir', cacheDir,
   ];
 
-  if (cookieConf.source === 'browser') {
-    args.push('--cookies-from-browser', cookieConf.path);
-    lastCookieUsedTime = Date.now();
-  } else if (hasValidCookies && cookieConf.path) {
+  if (hasValidCookies && cookieConf.path) {
     args.push('--cookies', cookieConf.path);
     lastCookieUsedTime = Date.now();
   }
@@ -417,7 +448,11 @@ function getCommonArgsConfig(quality = '', customCookiePath = null, customSource
 }
 
 function commonArgs(quality = '', customCookiePath = null) {
-  return getCommonArgsConfig(quality, customCookiePath).args;
+  return getCommonArgsConfig(quality, customCookiePath ? {
+    path: customCookiePath,
+    source: customCookiePath === globalCookiePath ? 'global' : 'temporary-user',
+    isTemporary: customCookiePath !== globalCookiePath
+  } : null).args;
 }
 
 // ----------------------------------------------------
@@ -446,9 +481,7 @@ app.get('/api/search', searchLimiter, async (req, res) => {
   ];
 
   const cookieConf = resolveCookieSource();
-  if (cookieConf.source === 'browser') {
-    args.push('--cookies-from-browser', cookieConf.path);
-  } else if (cookieConf.hasCookies && cookieConf.path) {
+  if (cookieConf.path) {
     args.push('--cookies', cookieConf.path);
   }
 
@@ -517,7 +550,10 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
     });
   }
 
-  const config = getCommonArgsConfig('4K');
+  const cookieConf = resolveCookieSource();
+  const config = getCommonArgsConfig('4K', cookieConf);
+  console.log(`[Cookie Source] Formats: ${cookieConf.source}`);
+
   const args = [
     ...config.args,
     '--dump-single-json',
@@ -708,7 +744,8 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
         heights: availableHeights,
         videoFormats: videoExts.length > 0 ? videoExts : ['mp4', 'mkv'],
         audioFormats: audioExts.length > 0 ? audioExts : ['mp3', 'm4a'],
-        rawFormats
+        rawFormats,
+        hasGlobalCookies: hasUsableGlobalCookies()
       });
     } catch (parseErr) {
       console.error('[Formats] Failed to parse JSON:', parseErr);
@@ -837,20 +874,7 @@ function runPeriodicCleanup() {
         } catch (e) {}
       }
       
-      // Clean up temporary cookie file
-      if (job.isTemporaryCookie && job.cookiePath && fs.existsSync(job.cookiePath)) {
-        try {
-          const resolvedPath = path.resolve(job.cookiePath);
-          const resolvedTempDir = path.resolve(tempDir);
-          const resolvedGlobalCookiePath = path.resolve(globalCookiePath);
-          if (resolvedPath.startsWith(resolvedTempDir) && resolvedPath !== resolvedGlobalCookiePath && !resolvedPath.includes('global_cookies')) {
-            fs.unlinkSync(job.cookiePath);
-            console.log(`[Cleanup] Deleted temporary cookie file for stale job ${fileId}`);
-          } else {
-            console.warn(`[Cleanup] Blocked deletion of unauthorized path: ${job.cookiePath}`);
-          }
-        } catch (e) {}
-      }
+      cleanupSelectedCookieFileAfterChildExit(fileId, job.cookiePath, job.cookieSource, job.cookieIsTemporary, job.child);
       
       // Clean up temporary outputs if present
       const targetFormat = job.format || 'mp4';
@@ -888,7 +912,7 @@ setInterval(runPeriodicCleanup, 10 * 60 * 1000);
 // Step 1: Initiate job, cache parameters, write temporary cookie file if provided
 app.post('/api/extract/initiate', extractLimiter, (req, res) => {
   try {
-    const { url, start, end, format, quality, format_id, cookies } = req.body;
+    const { url, start, end, format, quality, format_id, cookies, isExplicit } = req.body;
     
     console.log(`[Initiate] Received extraction initiation request.`);
 
@@ -917,7 +941,7 @@ app.post('/api/extract/initiate', extractLimiter, (req, res) => {
     console.log(`[Initiate] Job request: quality=${quality}, format_id=${format_id || 'none'}`);
 
     const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    const cookieSource = resolveCookieSource(cookies, fileId);
+    const cookieSource = resolveCookieSource(cookies, fileId, isExplicit === true);
 
     // Register job
     activeJobs.set(fileId, {
@@ -927,13 +951,15 @@ app.post('/api/extract/initiate', extractLimiter, (req, res) => {
       format: format || 'mp4',
       quality,
       format_id,
-      hasCookies: cookieSource.hasCookies,
+      hasCookies: !!cookieSource.path,
       cookiePath: cookieSource.path,
       cookieSource: cookieSource.source,
-      isTemporaryCookie: cookieSource.isTemporary,
+      cookieIsTemporary: cookieSource.isTemporary,
       status: 'initiated',
       createdAt: Date.now()
     });
+
+    console.log(`[Cookie Source] Initiate: ${cookieSource.source}`);
 
     console.log(`[Extraction Start] Job ID: ${fileId}, URL: ${url}, Range: ${start}-${end}, Quality: ${quality}, Format: ${format}`);
 
@@ -941,18 +967,7 @@ app.post('/api/extract/initiate', extractLimiter, (req, res) => {
     setTimeout(() => {
       if (activeJobs.has(fileId)) {
         const job = activeJobs.get(fileId);
-        if (job.isTemporaryCookie && job.cookiePath && fs.existsSync(job.cookiePath)) {
-          try {
-            const resolvedPath = path.resolve(job.cookiePath);
-            const resolvedTempDir = path.resolve(tempDir);
-            const resolvedGlobalCookiePath = path.resolve(globalCookiePath);
-            if (resolvedPath.startsWith(resolvedTempDir) && resolvedPath !== resolvedGlobalCookiePath && !resolvedPath.includes('global_cookies')) {
-              fs.unlinkSync(job.cookiePath);
-            } else {
-              console.warn(`[Timeout Cleanup] Blocked deletion of unauthorized path: ${job.cookiePath}`);
-            }
-          } catch (e) {}
-        }
+        cleanupSelectedCookieFileAfterChildExit(fileId, job.cookiePath, job.cookieSource, job.cookieIsTemporary, job.child);
         activeJobs.delete(fileId);
       }
     }, CONFIG.JOB_EXPIRY_MS);
@@ -1022,7 +1037,9 @@ app.get('/api/extract/stream', async (req, res) => {
   }
 
   const job = activeJobs.get(fileId);
-  const { url, start, end, format, quality, format_id, hasCookies, cookiePath, cookieSource, isTemporaryCookie } = job;
+  const { url, start, end, format, quality, format_id, hasCookies, cookiePath, cookieSource, cookieIsTemporary } = job;
+
+  console.log(`[Cookie Source] Stream: ${cookieSource}`);
 
   // Basic validation of start/end format
   const timeRegex = /^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
@@ -1074,7 +1091,11 @@ app.get('/api/extract/stream', async (req, res) => {
     ? null
     : 'ffmpeg:-c copy -avoid_negative_ts make_zero -loglevel warning';
 
-  const config = getCommonArgsConfig(quality, hasCookies ? cookiePath : null, cookieSource);
+  const config = getCommonArgsConfig(quality, {
+    path: hasCookies ? cookiePath : null,
+    source: cookieSource || 'none',
+    isTemporary: cookieIsTemporary === true
+  });
   const args = [
     ...config.args,
     '--download-sections', `*${start}-${end}`,
@@ -1222,6 +1243,8 @@ app.get('/api/extract/stream', async (req, res) => {
       appLogger('error', 'Extract', `Job ${fileId} failed.`);
     }
 
+    const childForCleanup = child;
+
     if (child && !child.killed) {
       try {
         child.kill('SIGKILL');
@@ -1231,26 +1254,7 @@ app.get('/api/extract/stream', async (req, res) => {
     // Clear process handle
     job.child = null;
 
-    if (!hasCookies && fs.existsSync(globalCookiePath)) {
-      console.log(`[Cookies] Preserved global cookie file`);
-    }
-
-    if (isTemporaryCookie && cookiePath && fs.existsSync(cookiePath)) {
-      try {
-        const resolvedPath = path.resolve(cookiePath);
-        const resolvedTempDir = path.resolve(tempDir);
-        const resolvedGlobalCookiePath = path.resolve(globalCookiePath);
-        if (resolvedPath.startsWith(resolvedTempDir) && resolvedPath !== resolvedGlobalCookiePath && !resolvedPath.includes('global_cookies')) {
-          fs.unlinkSync(cookiePath);
-          console.log(`[Cookies] Deleted temporary job cookie file`);
-          console.log(`[Cleanup] Deleted temporary Netscape cookie file for Job: ${fileId}`);
-        } else {
-          console.warn(`[Cleanup] Blocked deletion of unauthorized path: ${cookiePath}`);
-        }
-      } catch (unlinkErr) {
-        console.error('[Cleanup] Failed to delete temporary cookie file:', unlinkErr);
-      }
-    }
+    cleanupSelectedCookieFileAfterChildExit(fileId, cookiePath, cookieSource, cookieIsTemporary, childForCleanup);
 
     // Defensive cleanup of partial files on abort/failure
     if (!isCompletedSuccessfully) {
@@ -1842,12 +1846,17 @@ async function handleTelegramUpdate(update) {
             }
           }
           
+          const tempWritePath = globalCookiePath + '.tmp';
           try {
-            fs.writeFileSync(globalCookiePath, fileContent, 'utf8');
+            fs.writeFileSync(tempWritePath, fileContent, 'utf8');
+            fs.renameSync(tempWritePath, globalCookiePath);
             appLogger('info', 'Telegram Bot', `New global cookies file uploaded and registered via Telegram.`);
             sendTelegramMessage(chatId, "✅ Cookies uploaded and registered successfully. Previous global_cookies.txt backed up to global_cookies.txt.bak.");
           } catch (writeErr) {
             appLogger('error', 'Telegram Bot', `Failed to write new cookies: ${writeErr.message}`);
+            if (fs.existsSync(tempWritePath)) {
+              try { fs.unlinkSync(tempWritePath); } catch (_) {}
+            }
             if (backupCreated) {
               try {
                 fs.copyFileSync(globalCookiePath + '.bak', globalCookiePath);
