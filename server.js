@@ -174,25 +174,67 @@ function hmsToSecs(hms) {
   return parts[0] * 3600 + parts[1] * 60 + parts[2];
 }
 
-function isSupportedYouTubeUrl(urlStr) {
+function detectPlatform(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') return { platform: 'invalid', name: 'Invalid' };
   try {
-    const parsed = new URL(urlStr);
+    const parsed = new URL(urlStr.trim());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { platform: 'invalid', name: 'Invalid' };
+    }
     const host = parsed.hostname.toLowerCase();
-    return host === 'youtube.com' || 
-           host.endsWith('.youtube.com') || 
-           host === 'youtu.be' || 
-           host.endsWith('.youtu.be');
+    if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be' || host.endsWith('.youtu.be')) {
+      return { platform: 'youtube', name: 'YouTube' };
+    }
+    if (host === 'instagram.com' || host.endsWith('.instagram.com') || host === 'instagr.am' || host.endsWith('.instagr.am')) {
+      return { platform: 'instagram', name: 'Instagram' };
+    }
+    if (host === 'facebook.com' || host.endsWith('.facebook.com') || host === 'fb.watch' || host.endsWith('.fb.watch') || host === 'fb.com') {
+      return { platform: 'facebook', name: 'Facebook' };
+    }
+    if (host === 'pinterest.com' || host.endsWith('.pinterest.com') || host === 'pin.it' || host.endsWith('.pin.it')) {
+      return { platform: 'pinterest', name: 'Pinterest' };
+    }
+    if (host === 'tiktok.com' || host.endsWith('.tiktok.com') || host === 'vm.tiktok.com' || host.endsWith('.vm.tiktok.com')) {
+      return { platform: 'tiktok', name: 'TikTok' };
+    }
+    if (host === 'twitter.com' || host.endsWith('.twitter.com') || host === 'x.com' || host.endsWith('.x.com')) {
+      return { platform: 'twitter', name: 'X/Twitter' };
+    }
+    if (host === 'reddit.com' || host.endsWith('.reddit.com') || host === 'v.redd.it' || host.endsWith('.v.redd.it')) {
+      return { platform: 'reddit', name: 'Reddit' };
+    }
+    if (host === 'vimeo.com' || host.endsWith('.vimeo.com')) {
+      return { platform: 'vimeo', name: 'Vimeo' };
+    }
+    if (host === 'twitch.tv' || host.endsWith('.twitch.tv')) {
+      return { platform: 'twitch', name: 'Twitch' };
+    }
+    if (host === 'dailymotion.com' || host.endsWith('.dailymotion.com') || host === 'dai.ly' || host.endsWith('.dai.ly')) {
+      return { platform: 'dailymotion', name: 'Dailymotion' };
+    }
+    if (host === 'imgur.com' || host.endsWith('.imgur.com')) {
+      return { platform: 'imgur', name: 'Imgur' };
+    }
+    return { platform: 'other', name: 'Other Platform' };
   } catch (e) {
-    return false;
+    return { platform: 'invalid', name: 'Invalid' };
   }
+}
+
+function isSupportedYouTubeUrl(urlStr) {
+  return detectPlatform(urlStr).platform === 'youtube';
+}
+
+function isSupportedUrl(urlStr) {
+  return detectPlatform(urlStr).platform !== 'invalid';
 }
 
 function validateExtractionParams(url, start, end) {
   if (!url) {
     return { valid: false, error: 'Missing video URL.', code: 'INVALID_URL' };
   }
-  if (!isSupportedYouTubeUrl(url)) {
-    return { valid: false, error: 'Invalid or unsupported YouTube URL.', code: 'INVALID_URL' };
+  if (!isSupportedUrl(url)) {
+    return { valid: false, error: 'Invalid or unsupported URL.', code: 'INVALID_URL' };
   }
   const timeRegex = /^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
   if (!start || !timeRegex.test(start)) {
@@ -352,7 +394,12 @@ function hasUsableGlobalCookies() {
   }
 }
 
-function resolveCookieSource(jobCookiesText = null, fileId = null, isExplicit = false) {
+function resolveCookieSource(url = null, jobCookiesText = null, fileId = null, isExplicit = false) {
+  const detected = url ? detectPlatform(url) : { platform: 'youtube' };
+  if (detected.platform !== 'youtube') {
+    return { path: null, source: 'none', isTemporary: false };
+  }
+
   // 1. If isExplicit === true and jobCookiesText contains valid non-empty Netscape cookie data, create cookies_<fileId>.txt and return temporary-user
   if (isExplicit && jobCookiesText && jobCookiesText.trim() && fileId && isValidNetscapeCookie(jobCookiesText)) {
     const tempPath = path.join(tempDir, `cookies_${fileId}.txt`);
@@ -420,38 +467,47 @@ function cleanupSelectedCookieFileAfterChildExit(fileId, cookiePath, source, isT
   setTimeout(runCleanup, 3000);
 }
 
-function getCommonArgsConfig(quality = '', cookieConf = null) {
+function getCommonArgsConfig(url = '', quality = '', cookieConf = null) {
+  const detected = detectPlatform(url);
+  const isYouTube = detected.platform === 'youtube';
+
   if (!cookieConf) {
-    cookieConf = resolveCookieSource();
+    cookieConf = resolveCookieSource(url);
   }
 
-  const hasValidCookies = !!cookieConf.path && cookieConf.source !== 'none';
-  // Use tv_embedded first (avoids JS n-challenge requirement), then fall back to web_embedded and web.
-  // tv_embedded provides the best compatibility when cookies are present without needing a JS runtime.
+  const hasValidCookies = isYouTube && !!cookieConf.path && cookieConf.source !== 'none';
   const playerClient = hasValidCookies ? 'tv_embedded,web_embedded,web' : 'android_vr,web,android';
 
   const args = [
     '--ignore-config',
-    '--impersonate', 'chrome',
-    '--extractor-args', `youtube:player_client=${playerClient}`,
     '--cache-dir', cacheDir,
   ];
 
-  if (hasValidCookies && cookieConf.path) {
-    args.push('--cookies', cookieConf.path);
-    lastCookieUsedTime = Date.now();
+  if (isYouTube) {
+    args.push('--impersonate', 'chrome');
+    args.push('--extractor-args', `youtube:player_client=${playerClient}`);
+    if (hasValidCookies && cookieConf.path) {
+      args.push('--cookies', cookieConf.path);
+      lastCookieUsedTime = Date.now();
+    }
+  } else {
+    args.push('--impersonate', 'chrome');
   }
 
   return { 
     args, 
-    playerClient, 
+    playerClient: isYouTube ? playerClient : 'n/a', 
     cookieExists: cookieConf.source === 'global' ? fs.existsSync(globalCookiePath) : hasValidCookies, 
-    cookieSize: cookieConf.source === 'global' && fs.existsSync(globalCookiePath) ? fs.statSync(globalCookiePath).size : 0 
+    cookieSize: cookieConf.source === 'global' && fs.existsSync(globalCookiePath) ? fs.statSync(globalCookiePath).size : 0,
+    platform: detected.platform,
+    platformName: detected.name
   };
 }
 
-function commonArgs(quality = '', customCookiePath = null) {
-  return getCommonArgsConfig(quality, customCookiePath ? {
+function commonArgs(quality = '', customCookiePath = null, url = '') {
+  const detected = detectPlatform(url);
+  const isYouTube = detected.platform === 'youtube';
+  return getCommonArgsConfig(url, quality, customCookiePath && isYouTube ? {
     path: customCookiePath,
     source: customCookiePath === globalCookiePath ? 'global' : 'temporary-user',
     isTemporary: customCookiePath !== globalCookiePath
@@ -534,7 +590,7 @@ app.get('/api/search', searchLimiter, async (req, res) => {
   });
 });
 
-// GET /api/formats: Get available resolutions and formats for a YouTube video
+// GET /api/formats: Get available resolutions and formats for a video
 app.get('/api/formats', formatsLimiter, async (req, res) => {
   try {
   const { url } = req.query;
@@ -545,16 +601,19 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
       code: 'MISSING_URL'
     });
   }
-  if (!isSupportedYouTubeUrl(url)) {
+  if (!isSupportedUrl(url)) {
     return res.status(400).json({
       success: false,
-      error: 'Invalid or unsupported YouTube URL.',
+      error: 'Invalid or unsupported URL.',
       code: 'INVALID_URL'
     });
   }
 
-  const cookieConf = resolveCookieSource();
-  const config = getCommonArgsConfig('4K', cookieConf);
+  const detected = detectPlatform(url);
+  console.log(`[Platform] Detected: ${detected.name}`);
+
+  const cookieConf = resolveCookieSource(url);
+  const config = getCommonArgsConfig(url, '4K', cookieConf);
   console.log(`[Cookie Source] Formats: ${cookieConf.source}`);
 
   const args = [
@@ -583,6 +642,16 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
     if (code !== 0) {
       appLogger('error', 'Formats', `yt-dlp failed with exit code ${code}: ${stderrData}`);
       
+      const lowerStderr = stderrData.toLowerCase();
+      const isAuthRequired = lowerStderr.includes('login required') ||
+                             lowerStderr.includes('log in') ||
+                             lowerStderr.includes('sign in') ||
+                             lowerStderr.includes('cookies are required') ||
+                             lowerStderr.includes('account is private') ||
+                             lowerStderr.includes('private video') ||
+                             lowerStderr.includes('requires authentication') ||
+                             lowerStderr.includes('this video is restricted');
+
       const isBot = stderrData.includes("Sign in to confirm you're not a bot") || 
                     stderrData.includes("Sign in to confirm your age");
       const isCookieExpired = stderrData.includes('no longer valid') ||
@@ -595,7 +664,11 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
       let errorCode = 'FORMATS_FAILED';
       let statusCode = 500;
 
-      if (isCookieExpired) {
+      if (detected.platform !== 'youtube' && isAuthRequired) {
+        errorMsg = `This platform currently requires login/cookies and isn't supported by CropTube yet.`;
+        errorCode = 'PLATFORM_LOGIN_REQUIRED';
+        statusCode = 400;
+      } else if (isCookieExpired) {
         errorMsg = 'Your YouTube authentication cookies have expired and been rotated. Please export fresh cookies from your browser and update them in Settings.';
         errorCode = 'COOKIE_EXPIRED';
         statusCode = 403;
@@ -610,7 +683,9 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
         errorCode = 'SIGNATURE_FAILED';
         statusCode = 403;
       } else {
-        errorMsg = 'Failed to retrieve video formats.';
+        errorMsg = detected.platform !== 'youtube'
+          ? `Unable to retrieve formats from ${detected.name}. The post may be private, restricted, or unsupported.`
+          : 'Failed to retrieve video formats.';
       }
 
       sendTelegramAlert('Format Retrieval', url, 'N/A', 'N/A', stderrData, 'N/A');
@@ -623,17 +698,15 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
     }
 
     try {
-      appLogger('info', 'Formats', `Successfully resolved formats for video ${url}`);
+      appLogger('info', 'Formats', `Successfully resolved formats for video ${url} (${detected.name})`);
       const parsed = JSON.parse(stdoutData);
       const formats = parsed.formats || [];
 
-      // Helper function to classify format quality based on format_note, resolution, and width/height aspect ratios
       const classifyFormatQuality = (f) => {
         if (!f) return null;
 
         const STANDARD_HEIGHTS = [144, 240, 360, 480, 720, 1080, 1440, 2160];
 
-        // Helper to map an arbitrary height to the nearest standard label
         const getNearestStandardLabel = (height) => {
           if (!height) return null;
           let nearest = STANDARD_HEIGHTS[0];
@@ -648,7 +721,6 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
           return `${nearest}p`;
         };
 
-        // Priority 1: Use yt-dlp format_note if it contains a standard label (e.g. 2160p, 1080p, 1080p60)
         if (f.format_note) {
           const noteMatch = String(f.format_note).match(/(\d{3,4})p/i);
           if (noteMatch) {
@@ -659,7 +731,6 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
           }
         }
 
-        // Priority 2: Parse resolution metadata if width/height are missing (e.g. "3840x2160")
         let w = f.width;
         let h = f.height;
         if ((!w || !h) && f.resolution) {
@@ -671,18 +742,15 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
         }
 
         if (!w || !h) {
-          // If we only have height, fall back to nearest standard mapping
           if (h) return getNearestStandardLabel(h);
           return null;
         }
 
-        // Priority 3: Width/height aspect-ratio-aware classification
         const isVertical = h > w;
         const longSide = isVertical ? h : w;
         const shortSide = isVertical ? w : h;
 
         if (!isVertical) {
-          // Horizontal / Cinematic Video (use width/longSide as classification anchor)
           if (longSide >= 3840) return '2160p';
           if (longSide >= 2560) return '1440p';
           if (longSide >= 1920) return '1080p';
@@ -692,7 +760,6 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
           if (longSide >= 426) return '240p';
           return '144p';
         } else {
-          // Vertical Video (Shorts) (use width/shortSide as classification anchor)
           if (shortSide >= 2160) return '2160p';
           if (shortSide >= 1440) return '1440p';
           if (shortSide >= 1080) return '1080p';
@@ -704,31 +771,45 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
         }
       };
 
-      // Accept formats based on actual height (Requirement 4) and do not discard due to slight differences (Requirement 6)
-      const videoFormats = formats.filter(f => f.vcodec !== 'none' && f.height);
-      const audioFormats = formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none');
+      let videoFormats = formats.filter(f => f.vcodec !== 'none');
+      let audioFormats = formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none');
 
-      // Map display labels and collect unique ones
+      if (videoFormats.length === 0 && (parsed.vcodec || parsed.url)) {
+        videoFormats = [{
+          format_id: parsed.format_id || '0',
+          ext: parsed.ext || 'mp4',
+          height: parsed.height || 720,
+          width: parsed.width || 1280,
+          vcodec: parsed.vcodec || 'h264',
+          acodec: parsed.acodec || 'aac'
+        }];
+      }
+
       const heightsSet = new Set();
       videoFormats.forEach(f => {
-        f.label = classifyFormatQuality(f);
+        f.label = classifyFormatQuality(f) || (f.height ? `${f.height}p` : '720p');
         if (f.label) heightsSet.add(f.label);
       });
 
-      // Sort the standard display heights in descending order
       const heightsOrder = ['2160p', '1440p', '1080p', '720p', '480p', '360p', '240p', '144p'];
-      const availableHeights = heightsOrder.filter(h => heightsSet.has(h));
+      let availableHeights = heightsOrder.filter(h => heightsSet.has(h));
+      if (availableHeights.length === 0 && heightsSet.size > 0) {
+        availableHeights = Array.from(heightsSet);
+      }
+      if (availableHeights.length === 0) {
+        availableHeights = ['720p'];
+      }
 
-      const videoExts = Array.from(new Set(videoFormats.map(f => f.ext))).filter(e => e === 'mp4' || e === 'mkv' || e === 'webm');
-      const audioExts = Array.from(new Set(audioFormats.map(f => f.ext))).filter(e => e === 'mp3' || e === 'm4a' || e === 'opus');
+      const videoExts = Array.from(new Set(videoFormats.map(f => f.ext))).filter(e => ['mp4', 'mkv', 'webm', 'mov'].includes(e));
+      const audioExts = Array.from(new Set(audioFormats.map(f => f.ext))).filter(e => ['mp3', 'm4a', 'opus', 'aac'].includes(e));
 
-      console.log(`[Format Retrieval] Success:`);
+      console.log(`[Format Retrieval] Success (${detected.name}):`);
       console.log(`  - Number of formats returned: ${formats.length}`);
       console.log(`  - Filtered video formats with standard heights: ${videoFormats.length}`);
       console.log(`  - Available heights: ${availableHeights.join(', ')}`);
 
       const rawFormats = formats.map(f => {
-        const label = f.vcodec !== 'none' ? classifyFormatQuality(f) : null;
+        const label = f.vcodec !== 'none' ? (classifyFormatQuality(f) || (f.height ? `${f.height}p` : '720p')) : null;
         return {
           format_id: f.format_id,
           height: f.height || null,
@@ -742,12 +823,22 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
       });
 
       res.json({
-        title: parsed.title,
-        duration: parsed.duration,
+        title: parsed.title || `${detected.name} Video`,
+        duration: parsed.duration || 0,
+        platform: detected.platform,
+        platformName: parsed.extractor_key || parsed.extractor || detected.name,
         heights: availableHeights,
         videoFormats: videoExts.length > 0 ? videoExts : ['mp4', 'mkv'],
         audioFormats: audioExts.length > 0 ? audioExts : ['mp3', 'm4a'],
-        rawFormats,
+        rawFormats: rawFormats.length > 0 ? rawFormats : [{
+          format_id: parsed.format_id || 'best',
+          height: parsed.height || 720,
+          width: parsed.width || 1280,
+          label: '720p',
+          ext: parsed.ext || 'mp4',
+          vcodec: parsed.vcodec || 'h264',
+          acodec: parsed.acodec || 'aac'
+        }],
         hasGlobalCookies: hasUsableGlobalCookies()
       });
     } catch (parseErr) {
@@ -941,10 +1032,12 @@ app.post('/api/extract/initiate', extractLimiter, (req, res) => {
       });
     }
 
+    const detected = detectPlatform(url);
+    console.log(`[Platform] Detected: ${detected.name}`);
     console.log(`[Initiate] Job request: quality=${quality}, format_id=${format_id || 'none'}`);
 
     const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    const cookieSource = resolveCookieSource(cookies, fileId, isExplicit === true);
+    const cookieSource = resolveCookieSource(url, cookies, fileId, isExplicit === true);
 
     // Register job
     activeJobs.set(fileId, {
@@ -954,6 +1047,8 @@ app.post('/api/extract/initiate', extractLimiter, (req, res) => {
       format: format || 'mp4',
       quality,
       format_id,
+      platform: detected.platform,
+      platformName: detected.name,
       hasCookies: !!cookieSource.path,
       cookiePath: cookieSource.path,
       cookieSource: cookieSource.source,
@@ -1041,7 +1136,9 @@ app.get('/api/extract/stream', async (req, res) => {
 
   const job = activeJobs.get(fileId);
   const { url, start, end, format, quality, format_id, hasCookies, cookiePath, cookieSource, cookieIsTemporary } = job;
+  const detected = detectPlatform(url);
 
+  console.log(`[Platform] Detected: ${detected.name}`);
   console.log(`[Cookie Source] Stream: ${cookieSource}`);
 
   // Basic validation of start/end format
@@ -1067,7 +1164,7 @@ app.get('/api/extract/stream', async (req, res) => {
   let outputFilename = `croptube_${fileId}.${targetFormat === 'webm-audio' ? 'webm' : targetFormat}`;
   const outputPath = path.join(tempDir, outputFilename);
 
-  appLogger('info', 'Extract', `Starting job ${fileId}: url=${url}, quality=${quality}, format_id=${format_id || 'none'}`);
+  appLogger('info', 'Extract', `Starting job ${fileId}: url=${url}, platform=${detected.name}, quality=${quality}, format_id=${format_id || 'none'}`);
 
   // format_id is required — refuse extraction if missing
   if (!format_id || format_id === 'none') {
@@ -1082,6 +1179,10 @@ app.get('/api/extract/stream', async (req, res) => {
 
   if (isAudio) {
     formatSelector = format_id;
+  } else if (detected.platform !== 'youtube') {
+    formatSelector = (format_id && format_id !== 'none' && format_id !== 'best')
+      ? `${format_id}+bestaudio/${format_id}/best`
+      : 'bestvideo+bestaudio/best';
   } else {
     // Combine the user-selected format_id with the best audio stream
     formatSelector = `${format_id}+ba${noHLS}/bestaudio`;
@@ -1094,10 +1195,10 @@ app.get('/api/extract/stream', async (req, res) => {
     ? null
     : 'ffmpeg:-c copy -avoid_negative_ts make_zero -loglevel warning';
 
-  const config = getCommonArgsConfig(quality, {
-    path: hasCookies ? cookiePath : null,
-    source: cookieSource || 'none',
-    isTemporary: cookieIsTemporary === true
+  const config = getCommonArgsConfig(url, quality, {
+    path: (detected.platform === 'youtube' && hasCookies) ? cookiePath : null,
+    source: detected.platform === 'youtube' ? (cookieSource || 'none') : 'none',
+    isTemporary: detected.platform === 'youtube' && cookieIsTemporary === true
   });
   const args = [
     ...config.args,
@@ -1325,6 +1426,18 @@ app.get('/api/extract/stream', async (req, res) => {
     } else {
       console.error(`[Extract] Process terminated (code ${code}). Output exists: ${fs.existsSync(outputPath)}`);
       
+      const lowerStderr = stderrBuffer.toLowerCase();
+      const isPlatformAuth = detected.platform !== 'youtube' && (
+        lowerStderr.includes('login required') ||
+        lowerStderr.includes('log in') ||
+        lowerStderr.includes('sign in') ||
+        lowerStderr.includes('cookies are required') ||
+        lowerStderr.includes('account is private') ||
+        lowerStderr.includes('private video') ||
+        lowerStderr.includes('requires authentication') ||
+        lowerStderr.includes('this video is restricted')
+      );
+
       const isCookieError = stderrBuffer.includes("Sign in to confirm you're not a bot") ||
                             stderrBuffer.includes("Sign in to confirm you’re not a bot") ||
                             stderrBuffer.includes('Sign in to confirm your age') ||
@@ -1336,7 +1449,18 @@ app.get('/api/extract/stream', async (req, res) => {
       // Filter out alerts for routine errors
       sendTelegramAlert('Extraction - Process Error', url, quality, format_id, `Exit Code: ${code}\nStderr: ${stderrBuffer.substring(0, 300)}`, fileId);
       
-      if (isCookieError) {
+      if (isPlatformAuth) {
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ type: 'error', message: `This platform (${detected.name}) currently requires login/cookies and isn't supported by CropTube yet.` })}\n\n`, 'utf8', () => {
+            finish();
+          });
+          if (typeof res.flush === 'function') {
+            res.flush();
+          }
+        } else {
+          finish();
+        }
+      } else if (isCookieError) {
         if (!res.writableEnded) {
           res.write(`data: ${JSON.stringify({ type: 'cookie_error', message: 'Authentication cookies may be expired. Please update your session cookies in Settings.' })}\n\n`, 'utf8', () => {
             finish();

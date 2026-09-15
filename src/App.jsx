@@ -34,8 +34,57 @@ function normaliseHMS(raw) {
   return [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
 }
 
+function detectPlatformFrontend(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') return null;
+  try {
+    const parsed = new URL(urlStr.trim());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    const host = parsed.hostname.toLowerCase();
+    if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be' || host.endsWith('.youtu.be')) {
+      return { platform: 'youtube', name: 'YouTube' };
+    }
+    if (host === 'instagram.com' || host.endsWith('.instagram.com') || host === 'instagr.am' || host.endsWith('.instagr.am')) {
+      return { platform: 'instagram', name: 'Instagram' };
+    }
+    if (host === 'facebook.com' || host.endsWith('.facebook.com') || host === 'fb.watch' || host.endsWith('.fb.watch') || host === 'fb.com') {
+      return { platform: 'facebook', name: 'Facebook' };
+    }
+    if (host === 'pinterest.com' || host.endsWith('.pinterest.com') || host === 'pin.it' || host.endsWith('.pin.it')) {
+      return { platform: 'pinterest', name: 'Pinterest' };
+    }
+    if (host === 'tiktok.com' || host.endsWith('.tiktok.com') || host === 'vm.tiktok.com' || host.endsWith('.vm.tiktok.com')) {
+      return { platform: 'tiktok', name: 'TikTok' };
+    }
+    if (host === 'twitter.com' || host.endsWith('.twitter.com') || host === 'x.com' || host.endsWith('.x.com')) {
+      return { platform: 'twitter', name: 'X/Twitter' };
+    }
+    if (host === 'reddit.com' || host.endsWith('.reddit.com') || host === 'v.redd.it' || host.endsWith('.v.redd.it')) {
+      return { platform: 'reddit', name: 'Reddit' };
+    }
+    if (host === 'vimeo.com' || host.endsWith('.vimeo.com')) {
+      return { platform: 'vimeo', name: 'Vimeo' };
+    }
+    if (host === 'twitch.tv' || host.endsWith('.twitch.tv')) {
+      return { platform: 'twitch', name: 'Twitch' };
+    }
+    if (host === 'dailymotion.com' || host.endsWith('.dailymotion.com') || host === 'dai.ly' || host.endsWith('.dai.ly')) {
+      return { platform: 'dailymotion', name: 'Dailymotion' };
+    }
+    if (host === 'imgur.com' || host.endsWith('.imgur.com')) {
+      return { platform: 'imgur', name: 'Imgur' };
+    }
+    return { platform: 'other', name: 'Other Platform' };
+  } catch (e) {
+    return null;
+  }
+}
+
 function isYouTubeUrl(str) {
   return /(?:youtu\.be\/|[?&]v=|shorts\/|embed\/)([A-Za-z0-9_-]{11})/.test(str) || str.startsWith('http');
+}
+
+function isSupportedUrl(str) {
+  return detectPlatformFrontend(str) !== null;
 }
 
 function estimateOutputSize(quality, format, durationSecs) {
@@ -871,6 +920,8 @@ export default function App() {
       .catch(() => { });
   }, []);
 
+  const detectedPlatform = useMemo(() => detectPlatformFrontend(youtubeUrl), [youtubeUrl]);
+
   // ── Parse YouTube video ID from URL ──────────────────────────────────────
   useEffect(() => {
     if (!youtubeUrl) {
@@ -884,14 +935,18 @@ export default function App() {
       setErrorMsg('');
     } else {
       setVideoId('');
-      const isAttemptingUrl = youtubeUrl.startsWith('http') || youtubeUrl.includes('.') || youtubeUrl.includes('/') || youtubeUrl.includes('youtube') || youtubeUrl.includes('youtu');
-      if (isAttemptingUrl) {
-        setErrorMsg('Invalid YouTube URL. Paste a standard watch or share link.');
-      } else {
+      if (detectedPlatform) {
         setErrorMsg('');
+      } else {
+        const isAttemptingUrl = youtubeUrl.startsWith('http') || youtubeUrl.includes('.') || youtubeUrl.includes('/');
+        if (isAttemptingUrl) {
+          setErrorMsg('Invalid or unsupported URL. Paste a valid link.');
+        } else {
+          setErrorMsg('');
+        }
       }
     }
-  }, [youtubeUrl]);
+  }, [youtubeUrl, detectedPlatform]);
 
   // ── Load YouTube IFrame API once ──────────────────────────────────────────
   useEffect(() => {
@@ -954,9 +1009,10 @@ export default function App() {
     }
   }, [videoId]);
 
-  // ── Fetch formats and qualities dynamically on videoId change ───────────
+  // ── Fetch formats and qualities dynamically on URL change ───────────
   useEffect(() => {
-    if (!videoId) {
+    const trimmed = youtubeUrl.trim();
+    if (!trimmed || !detectedPlatform) {
       setAvailableVideoFormats(['mp4', 'mkv']);
       setAvailableAudioFormats(['mp3', 'm4a']);
       setAvailableResolutions(['2160p', '1440p', '1080p', '720p', '480p', '360p']);
@@ -968,7 +1024,7 @@ export default function App() {
 
     setIsLoadingFormats(true);
     setErrorMsg('');
-    fetch(`/api/formats?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`)
+    fetch(`/api/formats?url=${encodeURIComponent(trimmed)}`)
       .then(async r => {
         const isJson = r.headers.get('content-type')?.includes('application/json');
         const data = isJson ? await r.json() : null;
@@ -980,7 +1036,12 @@ export default function App() {
           setHasGlobalCookies(data.hasGlobalCookies);
         }
         if (data.title) setVideoTitle(data.title);
-        else setVideoTitle('YouTube Video');
+        else setVideoTitle(data.platformName ? `${data.platformName} Video` : 'Video');
+
+        if (data.duration && data.duration > 0) {
+          setDuration(data.duration);
+          setEndTime(secsToHMS(data.duration));
+        }
 
         if (data.rawFormats) setRawFormats(data.rawFormats);
         else setRawFormats([]);
@@ -1002,7 +1063,7 @@ export default function App() {
         setRawFormats([]);
       })
       .finally(() => { setIsLoadingFormats(false); });
-  }, [videoId, hasGlobalCookies]);
+  }, [youtubeUrl, detectedPlatform, hasGlobalCookies]);
 
   // ── Resolve exact yt-dlp format_id reactively ──────────────────────────────
   useEffect(() => {
@@ -1107,7 +1168,7 @@ export default function App() {
 
   // ── Extract clip ─────────────────────────────────────────────────────────
   const handleExtract = (customPayload = null) => {
-    if (!videoId) return;
+    if (!youtubeUrl.trim() && !customPayload) return;
     const targetPayload = customPayload || {
       url: youtubeUrl,
       start: startTime,
@@ -1217,10 +1278,10 @@ export default function App() {
           setJobHistory(prev => {
             const newEntry = {
               id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              title: videoTitle || playerRef.current?.getVideoData()?.title || 'YouTube Video',
+              title: videoTitle || playerRef.current?.getVideoData()?.title || (detectedPlatform ? `${detectedPlatform.name} Video` : 'Video Clip'),
               url: targetPayload.url,
               videoId: videoId,
-              thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+              thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : '',
               start: targetPayload.start,
               end: targetPayload.end,
               quality: targetPayload.quality,
@@ -1630,7 +1691,15 @@ export default function App() {
 
             {/* 2. LOAD VIDEO URL */}
             <div className="space-y-2">
-              <label className="text-[10px] font-bold tracking-widest text-luxury-sand uppercase">2. Load Video URL</label>
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] font-bold tracking-widest text-luxury-sand uppercase">2. Load Video URL</label>
+                {detectedPlatform && (
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-luxury-gold/15 text-luxury-gold border border-luxury-gold/30 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-luxury-gold animate-pulse" />
+                    Detected: {detectedPlatform.name}
+                  </span>
+                )}
+              </div>
               <div className="spotlight-open relative">
                 <input
                   type="text"
@@ -1640,9 +1709,9 @@ export default function App() {
                     if (!e.target.value) setSearchResults([]);
                   }}
                   onKeyDown={handleKeyDown}
-                  placeholder="Paste YouTube link or type search keywords..."
+                  placeholder="Paste video link or type search keywords..."
                   disabled={extracting}
-                  aria-label="YouTube URL or search query"
+                  aria-label="Video URL or search query"
                   className="w-full pl-3 pr-20 py-3 bg-luxury-black/40 border border-luxury-cream/10 focus:border-luxury-gold
                     rounded-xl outline-none text-xs text-luxury-cream placeholder-luxury-sand/50
                     transition-all disabled:opacity-50"
@@ -1710,13 +1779,27 @@ export default function App() {
                 <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/5 bg-black relative">
                   <div id="yt-player-wrap" className="w-full h-full" />
                 </div>
+              ) : detectedPlatform ? (
+                <div className="w-full aspect-video rounded-2xl border border-luxury-gold/30 bg-luxury-black/60 flex flex-col justify-center items-center gap-3 text-center p-6 spotlight">
+                  <div className="w-12 h-12 rounded-full bg-luxury-gold/10 border border-luxury-gold/30 flex items-center justify-center shadow-lg">
+                    <Scissors className="w-5 h-5 text-luxury-gold" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-luxury-cream mb-1">
+                      {detectedPlatform.name} Stream Detected
+                    </p>
+                    <p className="text-[11px] text-luxury-sand max-w-xs leading-relaxed">
+                      Format metadata loaded. Select quality and clip range timestamps (HH:MM:SS) below.
+                    </p>
+                  </div>
+                </div>
               ) : (
                 <div className="w-full aspect-video rounded-2xl border border-dashed border-luxury-cream/10 bg-luxury-black/50 flex flex-col justify-center items-center gap-3 text-center p-6">
                   <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shadow-lg">
                     <Play className="w-5 h-5 text-luxury-cream/50 animate-pulse" />
                   </div>
                   <p className="text-xs text-luxury-cream/40 max-w-xs leading-relaxed">
-                    Paste a YouTube URL above to load the video preview stream.
+                    Paste a video URL above to load the stream.
                   </p>
                   <button
                     onClick={() => setShowDashboard(false)}
@@ -1746,7 +1829,7 @@ export default function App() {
                     onGrab={() => grabTime(setStartTime)}
                     onSeek={() => seekPlayer(startTime)}
                     disabled={extracting}
-                    playerReady={playerReady}
+                    playerReady={playerReady || (!videoId && !!detectedPlatform)}
                   />
                   <TimeMarker
                     label="End"
@@ -1756,7 +1839,7 @@ export default function App() {
                     onGrab={() => grabTime(setEndTime)}
                     onSeek={() => seekPlayer(endTime)}
                     disabled={extracting}
-                    playerReady={playerReady}
+                    playerReady={playerReady || (!videoId && !!detectedPlatform)}
                   />
                 </div>
 

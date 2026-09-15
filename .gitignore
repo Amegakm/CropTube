@@ -27,3 +27,7 @@ Thumbs.db
 
 # Gemini IDE Configuration
 .gemini/
+
+# Authentication cookies - NEVER commit
+global_cookies.txt
+cookies_*.txt
