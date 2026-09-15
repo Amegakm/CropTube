@@ -118,6 +118,9 @@ function sanitizeLogMessage(msg) {
     }
   }
   return msg
+    // Redact signed media URLs before generic path/token redaction can leave query fragments behind.
+    .replace(/https?:\/\/[^\s"'<>]*googlevideo\.com\/videoplayback[^\s"'<>]*/gi, '[redacted_signed_media_url]')
+    .replace(/\b[\w.-]*googlevideo\.com\/videoplayback[^\s"'<>]*/gi, '[redacted_signed_media_url]')
     // Redact HTTP and Netscape cookies
     .replace(/(?:SID|HSID|SSID|APISID|SAPISID|LOGIN_INFO|VISITOR_INFO1_LIVE|YSC|__Secure-[a-zA-Z0-9\-_]+)\b(?:=|\t|\s+)[^\s;\t]+/gi, '[redacted]')
     .replace(/^(?:(?!\s).)*youtube\.com\s+[\w]+\s+\/\s+[\w]+\s+\d+\s+(?:SID|HSID|SSID|APISID|SAPISID|LOGIN_INFO|VISITOR_INFO1_LIVE|YSC|__Secure-[a-zA-Z0-9\-_]+)\s+[^\r\n]+/gm, '[redacted_netscape_cookie_line]')
@@ -1573,24 +1576,11 @@ function sendTelegramAlert(stage, url, quality, format_id, errorMessage, jobId =
     lowerMsg.includes('connection reset');
 
   if (isRoutineError) {
-    console.log(`[Telegram Alert] Suppressed routine alert: stage=${stage}, error=${rawMsg.substring(0, 80).replace(/\n/g, ' ')}`);
+    console.log(`[Telegram Alert] Suppressed routine alert: stage=${stage}, error=${sanitizeLogMessage(rawMsg).substring(0, 80).replace(/\n/g, ' ')}`);
     return;
   }
 
-  const sanitized = rawMsg
-    // A. Redact HTTP and Netscape cookies for sensitive YouTube auth keys
-    .replace(/(?:SID|HSID|SSID|APISID|SAPISID|LOGIN_INFO|VISITOR_INFO1_LIVE|YSC|__Secure-[a-zA-Z0-9\-_]+)\b(?:=|\t|\s+)[^\s;\t]+/gi, '[redacted]')
-    // Also redact raw Netscape cookie lines
-    .replace(/^(?:(?!\s).)*youtube\.com\s+[\w]+\s+\/\s+[\w]+\s+\d+\s+(?:SID|HSID|SSID|APISID|SAPISID|LOGIN_INFO|VISITOR_INFO1_LIVE|YSC|__Secure-[a-zA-Z0-9\-_]+)\s+[^\r\n]+/gm, '[redacted_netscape_cookie_line]')
-    // B. Sanitize absolute Windows paths
-    .replace(/[A-Za-z]:\\[\w\s.\-_\\+]+/g, '[path]')
-    // C. Sanitize Unix and absolute paths
-    .replace(/\/[\w.\-_\\+]+/g, '[path]')
-    // D. Sanitize IP addresses
-    .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '[ip]')
-    // E. Sanitize long auth tokens / base64 strings (40+ characters)
-    .replace(/[A-Za-z0-9+/=]{40,}/g, '[redacted]')
-    .substring(0, 500);
+  const sanitized = sanitizeLogMessage(rawMsg).substring(0, 500);
 
   // 2. Generate duplicate cache hash based on SANITIZED payload
   const hash = `${stage}|${url || 'N/A'}|${sanitized}`;
