@@ -328,6 +328,199 @@ const tempDir = path.join(__dirname, 'temp');
 const cacheDir = path.join(tempDir, 'cache');
 const isWindows = process.platform === 'win32';
 const globalCookiePath = path.join(binDir, 'global_cookies.txt');
+const cookieLifecyclePath = path.join(binDir, 'cookie_lifecycle.json');
+
+let cookieExpirationTimer = null;
+
+// --- Cookie Lifecycle Helpers ---
+function getCookieLifecycle() {
+  if (!fs.existsSync(cookieLifecyclePath)) {
+    return { uploaded_at: null, activated_at: null, expires_at: null };
+  }
+  try {
+    const data = fs.readFileSync(cookieLifecyclePath, 'utf8');
+    return JSON.parse(data);
+  } catch (_) {
+    return { uploaded_at: null, activated_at: null, expires_at: null };
+  }
+}
+
+function saveCookieLifecycle(lifecycle) {
+  try {
+    fs.writeFileSync(cookieLifecyclePath, JSON.stringify(lifecycle, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[Cookie Lifecycle] Failed to save lifecycle:', err);
+  }
+}
+
+function resetCookieLifecycle() {
+  if (cookieExpirationTimer) {
+    clearTimeout(cookieExpirationTimer);
+    cookieExpirationTimer = null;
+  }
+  const lifecycle = {
+    uploaded_at: new Date().toISOString(),
+    activated_at: null,
+    expires_at: null
+  };
+  saveCookieLifecycle(lifecycle);
+  return lifecycle;
+}
+
+function clearCookieLifecycle() {
+  if (cookieExpirationTimer) {
+    clearTimeout(cookieExpirationTimer);
+    cookieExpirationTimer = null;
+  }
+  try {
+    if (fs.existsSync(cookieLifecyclePath)) {
+      fs.unlinkSync(cookieLifecyclePath);
+    }
+  } catch (err) {
+    console.error('[Cookie Lifecycle] Failed to delete lifecycle file:', err);
+  }
+}
+
+function handleCookieExpiration(source = 'automatic') {
+  if (cookieExpirationTimer) {
+    clearTimeout(cookieExpirationTimer);
+    cookieExpirationTimer = null;
+  }
+
+  const lifecycle = getCookieLifecycle();
+  const cookiesExist = fs.existsSync(globalCookiePath);
+
+  // If already absent and no lifecycle, do nothing
+  if (!cookiesExist && !lifecycle.expires_at) {
+    return;
+  }
+
+  console.log(`[Cookie Lifecycle] YouTube global cookie EXPIRED (${lifecycle.expires_at || 'unknown'}). Triggering cleanup and notification (${source}).`);
+
+  // 1. Physically delete global_cookies.txt
+  if (fs.existsSync(globalCookiePath)) {
+    try {
+      fs.unlinkSync(globalCookiePath);
+      console.log('[Cookie Lifecycle] Physically deleted expired global_cookies.txt');
+    } catch (err) {
+      console.error('[Cookie Lifecycle] Failed to delete expired global_cookies.txt:', err);
+    }
+  }
+
+  // 2. Clear cookie_lifecycle.json
+  clearCookieLifecycle();
+
+  // 3. Send Telegram notification to admin
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (chatId) {
+    const message = [
+      '⚠️ *YouTube Cookies Expired*',
+      '',
+      'Your 14-day YouTube cookies have expired and have been automatically removed from the server.',
+      '',
+      'Please upload a new cookie file using /upload to ensure uninterrupted YouTube extractions.'
+    ].join('\n');
+    sendTelegramMessage(chatId, message);
+    console.log('[Cookie Lifecycle] Sent Telegram expiration notification to chat:', chatId);
+  }
+}
+
+function scheduleCookieExpiration(delayMs) {
+  if (cookieExpirationTimer) {
+    clearTimeout(cookieExpirationTimer);
+    cookieExpirationTimer = null;
+  }
+
+  if (delayMs <= 0) {
+    handleCookieExpiration('timer-immediate');
+    return;
+  }
+
+  const maxDelay = 2147483647; // Node.js setTimeout 32-bit limit (~24.8 days)
+  const timeoutMs = Math.min(delayMs, maxDelay);
+
+  cookieExpirationTimer = setTimeout(() => {
+    cookieExpirationTimer = null;
+    const lifecycle = getCookieLifecycle();
+    if (lifecycle.expires_at) {
+      const now = Date.now();
+      const expiresTime = new Date(lifecycle.expires_at).getTime();
+      if (now >= expiresTime) {
+        handleCookieExpiration('proactive-timer');
+      } else {
+        scheduleCookieExpiration(expiresTime - now);
+      }
+    }
+  }, timeoutMs);
+
+  if (cookieExpirationTimer && cookieExpirationTimer.unref) {
+    cookieExpirationTimer.unref();
+  }
+}
+
+function checkAndUpdateCookieLifecycle() {
+  if (!hasUsableGlobalCookies()) {
+    return { isUsable: false, status: 'absent', details: null };
+  }
+
+  let lifecycle = getCookieLifecycle();
+  const now = Date.now();
+
+  // On first use: activate cookie for 14 days
+  if (!lifecycle.activated_at) {
+    const activatedDate = new Date();
+    const expiresDate = new Date(activatedDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+    lifecycle = {
+      uploaded_at: lifecycle.uploaded_at || activatedDate.toISOString(),
+      activated_at: activatedDate.toISOString(),
+      expires_at: expiresDate.toISOString()
+    };
+    saveCookieLifecycle(lifecycle);
+    console.log(`[Cookie Lifecycle] First activation! 14-day validity started. Expires: ${lifecycle.expires_at}`);
+    scheduleCookieExpiration(expiresDate.getTime() - now);
+  }
+
+  const expiresTime = new Date(lifecycle.expires_at).getTime();
+  if (now >= expiresTime) {
+    console.log(`[Cookie Lifecycle] YouTube global cookie has EXPIRED (${lifecycle.expires_at}).`);
+    handleCookieExpiration('request-check');
+    return { isUsable: false, status: 'expired', details: null };
+  }
+
+  // Ensure proactive expiration timer is running for active cookie
+  if (!cookieExpirationTimer) {
+    scheduleCookieExpiration(expiresTime - now);
+  }
+
+  return { isUsable: true, status: 'active', details: lifecycle };
+}
+
+function initCookieLifecycle() {
+  const cookiesExist = fs.existsSync(globalCookiePath);
+  const lifecycle = getCookieLifecycle();
+
+  if (!cookiesExist) {
+    if (lifecycle.uploaded_at || lifecycle.activated_at || lifecycle.expires_at) {
+      clearCookieLifecycle();
+    }
+    return;
+  }
+
+  if (lifecycle.activated_at && lifecycle.expires_at) {
+    const now = Date.now();
+    const expiresTime = new Date(lifecycle.expires_at).getTime();
+    if (now >= expiresTime) {
+      console.log(`[Cookie Lifecycle] Startup check: YouTube cookies expired while offline (${lifecycle.expires_at}). Cleaning up...`);
+      handleCookieExpiration('startup-expired');
+    } else {
+      const remainingMs = expiresTime - now;
+      console.log(`[Cookie Lifecycle] Startup check: YouTube cookies active. Expires in ${((remainingMs) / (1000 * 60 * 60 * 24)).toFixed(1)} days (${lifecycle.expires_at}).`);
+      scheduleCookieExpiration(remainingMs);
+    }
+  } else {
+    console.log('[Cookie Lifecycle] Startup check: YouTube cookies present and unactivated (14-day timer starts on first use).');
+  }
+}
 
 // Create necessary folders
 for (const dir of [binDir, tempDir, cacheDir]) {
@@ -340,6 +533,9 @@ for (const dir of [binDir, tempDir, cacheDir]) {
     }
   }
 }
+
+// Initialize cookie lifecycle timer / cleanup on server boot
+initCookieLifecycle();
 
 /**
  * Resolves the path to the yt-dlp executable.
@@ -411,8 +607,10 @@ function resolveCookieSource(url = null, jobCookiesText = null, fileId = null, i
     }
   }
 
-  // 2. Otherwise, if global_cookies.txt exists and is non-empty, return the exact global path
-  if (hasUsableGlobalCookies()) {
+  // 2. Otherwise, if global_cookies.txt exists and is active (within 14 days of first activation), return global path
+  const lifecycleCheck = checkAndUpdateCookieLifecycle();
+  if (lifecycleCheck.isUsable) {
+    lastCookieUsedTime = Date.now();
     return { path: globalCookiePath, source: 'global', isTemporary: false };
   }
 
@@ -998,6 +1196,18 @@ function runPeriodicCleanup() {
   
   // 2. Scan tempDir for orphaned files
   runStaleFileSweeper();
+
+  // 3. Periodic cookie lifecycle check
+  const periodicLifecycle = getCookieLifecycle();
+  if (periodicLifecycle.activated_at && periodicLifecycle.expires_at) {
+    const now = Date.now();
+    const expiresTime = new Date(periodicLifecycle.expires_at).getTime();
+    if (now >= expiresTime) {
+      handleCookieExpiration('periodic-cleanup');
+    } else if (!cookieExpirationTimer) {
+      scheduleCookieExpiration(expiresTime - now);
+    }
+  }
 }
 
 // Run periodic cleanup every 10 minutes
@@ -1600,6 +1810,7 @@ app.post('/api/settings/cookies', (req, res) => {
 
   try {
     fs.writeFileSync(globalCookiePath, cookies.trim(), 'utf8');
+    resetCookieLifecycle();
     console.log('[Settings] Pre-registered global server-side cookies file successfully.');
     res.json({ success: true });
   } catch (err) {
@@ -1964,8 +2175,9 @@ async function handleTelegramUpdate(update) {
           try {
             fs.writeFileSync(tempWritePath, fileContent, 'utf8');
             fs.renameSync(tempWritePath, globalCookiePath);
+            resetCookieLifecycle();
             appLogger('info', 'Telegram Bot', `New global cookies file uploaded and registered via Telegram.`);
-            sendTelegramMessage(chatId, "✅ Cookies uploaded and registered successfully. Previous global_cookies.txt backed up to global_cookies.txt.bak.");
+            sendTelegramMessage(chatId, "✅ Cookies uploaded and registered successfully. 14-day validity timer will start on first use. Previous global_cookies.txt backed up to global_cookies.txt.bak.");
           } catch (writeErr) {
             appLogger('error', 'Telegram Bot', `Failed to write new cookies: ${writeErr.message}`);
             if (fs.existsSync(tempWritePath)) {
@@ -2010,11 +2222,27 @@ async function handleTelegramUpdate(update) {
         const cookiesExist = fs.existsSync(globalCookiePath);
         let cookieSizeStr = 'N/A';
         let cookieMtimeStr = 'N/A';
+        let cookieLifecycleSummary = 'Absent';
+
         if (cookiesExist) {
           try {
             const stats = fs.statSync(globalCookiePath);
             cookieSizeStr = `${stats.size} bytes`;
-            cookieMtimeStr = stats.mtime.toISOString();
+            const lifecycle = getCookieLifecycle();
+            cookieMtimeStr = lifecycle.uploaded_at || stats.mtime.toISOString();
+
+            if (!lifecycle.activated_at) {
+              cookieLifecycleSummary = 'Present (Unactivated - 14 days ready)';
+            } else {
+              const now = Date.now();
+              const expiresTime = new Date(lifecycle.expires_at).getTime();
+              if (now > expiresTime) {
+                cookieLifecycleSummary = 'Expired';
+              } else {
+                const daysLeft = ((expiresTime - now) / (1000 * 60 * 60 * 24)).toFixed(1);
+                cookieLifecycleSummary = `Active (${daysLeft}d remaining)`;
+              }
+            }
           } catch (_) {}
         }
         const ytDlpExists = !!ytdlpCmd && fs.existsSync(ytdlpCmd);
@@ -2030,6 +2258,7 @@ async function handleTelegramUpdate(update) {
           `  RSS: ${rssMB} MB`,
           `  Heap Used: ${heapMB} MB`,
           `• *Cookies Present*: ${cookiesExist ? 'Yes' : 'No'}`,
+          `• *Cookie Lifecycle*: ${cookieLifecycleSummary}`,
           `• *Cookie Size*: ${cookieSizeStr}`,
           `• *Last Cookie Upload*: ${cookieMtimeStr}`,
           `• *Last Cookie Use*: ${lastUsedStr}`,
@@ -2112,12 +2341,14 @@ async function handleTelegramUpdate(update) {
         if (fs.existsSync(globalCookiePath)) {
           try {
             fs.unlinkSync(globalCookiePath);
+            clearCookieLifecycle();
             appLogger('info', 'Telegram Bot', 'Global cookies file deleted via Telegram command.');
             sendTelegramMessage(chatId, "🗑️ Global cookies deleted successfully.");
           } catch (err) {
             sendTelegramMessage(chatId, `❌ Failed to delete cookies: ${err.message}`);
           }
         } else {
+          clearCookieLifecycle();
           sendTelegramMessage(chatId, "No global cookies file found to delete.");
         }
         break;
@@ -2129,12 +2360,31 @@ async function handleTelegramUpdate(update) {
         } else {
           try {
             const stats = fs.statSync(globalCookiePath);
+            const lifecycle = getCookieLifecycle();
+            let lifecycleStatusStr = '';
+
+            if (!lifecycle.activated_at) {
+              lifecycleStatusStr = "Not activated yet (starts 14-day timer on first use)";
+            } else {
+              const now = Date.now();
+              const expiresTime = new Date(lifecycle.expires_at).getTime();
+              if (now > expiresTime) {
+                lifecycleStatusStr = `EXPIRED on ${lifecycle.expires_at}`;
+              } else {
+                const msLeft = expiresTime - now;
+                const daysLeft = (msLeft / (1000 * 60 * 60 * 24)).toFixed(1);
+                lifecycleStatusStr = `Active (${daysLeft} days remaining, expires ${lifecycle.expires_at})`;
+              }
+            }
+
             const lastUsedStr = lastCookieUsedTime ? new Date(lastCookieUsedTime).toISOString() : 'N/A';
+            const uploadTimeStr = lifecycle.uploaded_at || stats.mtime.toISOString();
             const infoMsg = [
               `🍪 *Cookie Info*`,
               `• *Present/Absent*: Present`,
               `• *Size*: ${stats.size} bytes`,
-              `• *Upload Time*: ${stats.mtime.toISOString()}`,
+              `• *Upload Time*: ${uploadTimeStr}`,
+              `• *Activation Status*: ${lifecycleStatusStr}`,
               `• *Last Used Time*: ${lastUsedStr}`
             ].join('\n');
             sendTelegramMessage(chatId, infoMsg);
