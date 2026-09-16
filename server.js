@@ -859,11 +859,13 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
                               stderrData.includes('n challenge solving failed');
       
       let errorMsg;
+      let errorDetails = '';
       let errorCode = 'FORMATS_FAILED';
       let statusCode = 500;
 
       if (detected.platform !== 'youtube' && isAuthRequired) {
-        errorMsg = `This platform currently requires login/cookies and isn't supported by CropTube yet.`;
+        errorMsg = 'No downloadable stream found for this URL.';
+        errorDetails = 'The post may require login or may not expose a downloadable video.';
         errorCode = 'PLATFORM_LOGIN_REQUIRED';
         statusCode = 400;
       } else if (isCookieExpired) {
@@ -881,9 +883,14 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
         errorCode = 'SIGNATURE_FAILED';
         statusCode = 403;
       } else {
-        errorMsg = detected.platform !== 'youtube'
-          ? `Unable to retrieve formats from ${detected.name}. The post may be private, restricted, or unsupported.`
-          : 'Failed to retrieve video formats.';
+        if (detected.platform !== 'youtube') {
+          errorMsg = 'No downloadable stream found for this URL.';
+          errorDetails = 'The post may require login or may not expose a downloadable video.';
+          errorCode = 'NO_FORMATS_FOUND';
+          statusCode = 400;
+        } else {
+          errorMsg = 'Failed to retrieve video formats.';
+        }
       }
 
       sendTelegramAlert('Format Retrieval', url, 'N/A', 'N/A', stderrData, 'N/A');
@@ -891,6 +898,7 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
       return res.status(statusCode).json({
         success: false,
         error: errorMsg,
+        details: errorDetails,
         code: errorCode
       });
     }
@@ -994,18 +1002,6 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
       if (availableHeights.length === 0 && heightsSet.size > 0) {
         availableHeights = Array.from(heightsSet);
       }
-      if (availableHeights.length === 0) {
-        availableHeights = ['720p'];
-      }
-
-      const videoExts = Array.from(new Set(videoFormats.map(f => f.ext))).filter(e => ['mp4', 'mkv', 'webm', 'mov'].includes(e));
-      const audioExts = Array.from(new Set(audioFormats.map(f => f.ext))).filter(e => ['mp3', 'm4a', 'opus', 'aac'].includes(e));
-
-      console.log(`[Format Retrieval] Success (${detected.name}):`);
-      console.log(`  - Number of formats returned: ${formats.length}`);
-      console.log(`  - Filtered video formats with standard heights: ${videoFormats.length}`);
-      console.log(`  - Available heights: ${availableHeights.join(', ')}`);
-
       const rawFormats = formats.map(f => {
         const label = f.vcodec !== 'none' ? (classifyFormatQuality(f) || (f.height ? `${f.height}p` : '720p')) : null;
         return {
@@ -1020,23 +1016,37 @@ app.get('/api/formats', formatsLimiter, async (req, res) => {
         };
       });
 
+      if (rawFormats.length === 0 && videoFormats.length > 0) {
+        rawFormats.push(...videoFormats);
+      }
+
+      // If zero usable formats were returned
+      if (rawFormats.length === 0 && videoFormats.length === 0 && audioFormats.length === 0) {
+        console.warn(`[Format Retrieval] Zero usable formats returned for ${url} (${detected.name})`);
+        return res.status(404).json({
+          success: false,
+          error: 'No downloadable stream found for this URL.',
+          details: 'The post may require login or may not expose a downloadable video.',
+          code: 'NO_FORMATS_FOUND',
+          heights: [],
+          videoFormats: [],
+          audioFormats: [],
+          rawFormats: []
+        });
+      }
+
+      const videoExts = Array.from(new Set(videoFormats.map(f => f.ext))).filter(e => ['mp4', 'mkv', 'webm', 'mov'].includes(e));
+      const audioExts = Array.from(new Set(audioFormats.map(f => f.ext))).filter(e => ['mp3', 'm4a', 'opus', 'aac'].includes(e));
+
       res.json({
         title: parsed.title || `${detected.name} Video`,
         duration: parsed.duration || 0,
         platform: detected.platform,
         platformName: parsed.extractor_key || parsed.extractor || detected.name,
         heights: availableHeights,
-        videoFormats: videoExts.length > 0 ? videoExts : ['mp4', 'mkv'],
-        audioFormats: audioExts.length > 0 ? audioExts : ['mp3', 'm4a'],
-        rawFormats: rawFormats.length > 0 ? rawFormats : [{
-          format_id: parsed.format_id || 'best',
-          height: parsed.height || 720,
-          width: parsed.width || 1280,
-          label: '720p',
-          ext: parsed.ext || 'mp4',
-          vcodec: parsed.vcodec || 'h264',
-          acodec: parsed.acodec || 'aac'
-        }],
+        videoFormats: videoExts.length > 0 ? videoExts : ['mp4'],
+        audioFormats: audioExts.length > 0 ? audioExts : ['mp3'],
+        rawFormats: rawFormats,
         hasGlobalCookies: hasUsableGlobalCookies()
       });
     } catch (parseErr) {
